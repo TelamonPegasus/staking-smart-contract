@@ -100,7 +100,7 @@ contract Staking is Ownable {
         // verify input argument
         require(index < userStakes[msg.sender].length, "Invalid index of staking");
         // cannot claim before the stake fully matures
-        require(isClaimableRewards(msg.sender, index), "Cannot claim rewards before locking is over.");
+        require(!isStaked(msg.sender, index), "Cannot claim rewards before locking is over.");
         UserStake storage userStake = userStakes[msg.sender][index];
         // validate amount for reward token
         require(userStake.rewards > 0, "There is no claimable reward token.");
@@ -126,13 +126,54 @@ contract Staking is Ownable {
         }
     }
 
-    function isClaimableRewards(address staker, uint256 index) public view returns(bool) {
+    function isStaked(address staker, uint256 index) public view returns(bool) {
         // verify input argument
         require(index <  userStakes[staker].length, "Invalidate index for staked records.");
 
-        return userStakes[staker][index].lockTime <= block.timestamp;
+        return userStakes[staker][index].lockTime > block.timestamp;
     }
 
-    // ******* getters ******** //
+    /*****************************************************
+                            Getter
+    *****************************************************/
 
+    /**
+	 * @notice How many stakes a particular address has done
+	 *
+	 * @param staker an address to query number of times it staked
+	 * @return number of times a particular address has staked
+	 */
+    function numStakes(address staker) public returns(uint256) {
+        return userStakes[staker].length;
+    }
+
+    /*****************************************************
+                            Setter
+    *****************************************************/
+
+    /**
+     * @notice Set the staking token
+     * 
+     * @dev Only owner can call this function; should check non-zero address
+     * 
+     * @param _token address of the staking token to be updated
+     */
+    function setToken(address _token) external onlyOwner {
+        require(_token != address(0), "Staking token address cannot be zero address");
+
+        token = IERC20(_token);
+    }
+
+    /**
+     * @notice Set the reward token
+     * 
+     * @dev Only owner can call this function; should check non-zero address
+     * 
+     * @param _rewardToken address of the reward token to be updated
+     */
+    function setRewardToken(address _rewardToken) external onlyOwner {
+        require(_rewardToken != address(0), "Staking token address cannot be zero address");
+
+        rewardToken = IERC20(_rewardToken);
+    }
 }
