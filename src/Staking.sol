@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/ownership/Ownable.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 contract Staking is Ownable {
+	using SafeERC20 for IERC20;
     struct UserStake {
         uint256 amount;
         uint256 lockTime;
@@ -74,14 +75,19 @@ contract Staking is Ownable {
 		emit Staked(msg.sender, amount, block.timestamp);
 	}
     
-    function withdraw(index) external {
-        UserStake storage userStake = userStakes[msg.sender];
+    function withdraw(uint256 index) external {
+        // verify input argument
+        require(index < userStakes[msg.sender].length, "Invalid index of staking");
+        
+        UserStake storage userStake = userStakes[msg.sender][index];
         require(userStake.amount > 0, "There is no staked token");
 
         // if the staking is not 
         if (block.timestamp < userStake.lockTime) {
             userStake.rewards = 0;
         }
+
+        uint256 amount = userStake.amount;
 		
         // transfer token from here to staker's wallet
         token.safeTransfer(msg.sender, amount);
@@ -92,9 +98,9 @@ contract Staking is Ownable {
 
     function claimRewards(uint256 index) external {
         // verify input argument
-        require(index < userStakes[msg.sender].length)
+        require(index < userStakes[msg.sender].length, "Invalid index of staking");
         // cannot claim before the stake fully matures
-        require(isClaimableRewards(), "Cannot claim rewards before locking is over.");
+        require(isClaimableRewards(msg.sender, index), "Cannot claim rewards before locking is over.");
         UserStake storage userStake = userStakes[msg.sender][index];
         // validate amount for reward token
         require(userStake.rewards > 0, "There is no claimable reward token.");
@@ -120,11 +126,11 @@ contract Staking is Ownable {
         }
     }
 
-    function isClaimableRewards(index) public view returns(bool) {
+    function isClaimableRewards(address staker, uint256 index) public view returns(bool) {
         // verify input argument
-        require(index <  userStakes[msg.sender].length, "Invalidate index for staked records.");
+        require(index <  userStakes[staker].length, "Invalidate index for staked records.");
 
-        return userStakes[msg.sender][index].lockTime <= block.timestamp;
+        return userStakes[staker][index].lockTime <= block.timestamp;
     }
 
     // ******* getters ******** //

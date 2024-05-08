@@ -8,7 +8,6 @@ contract StakingTest is Test {
     Staking public staking;
 
     function setUp() public {
-        staking = new Staking();
     }
 
     function test_Test() public {
