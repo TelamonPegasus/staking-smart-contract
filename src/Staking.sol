@@ -21,8 +21,19 @@ contract Staking is Ownable {
 	// Total supply of staked tokens
 	uint256 public totalSupply;
 
+    // Value that represents whether staking is possible or not
+    bool public stakingEnabled;
+
     // Mapping to track user balances
 	mapping(address => UserStake[]) private userStakes;
+
+	modifier stakingEnabled(uint256 role) {
+		// verify the staking enabled
+		require(stakingEnabled, "Staking is not enabled.");
+
+		// execute the rest of the function
+		_;
+	}
 
     /* ========== EVENTS ========== */
 	// Event emitted when a user stakes token
@@ -31,6 +42,8 @@ contract Staking is Ownable {
 	event Withdrawed(address indexed user, uint256 amount, uint256 time);
 	// Event emitted when a user claims reward token
 	event Claimed(address indexed user, uint256 amount, uint256 time);
+	// Event emitted when tokens are recovered
+	event Recovered(address indexed sender, address token, uint256 amount);
 
     /**
      * @dev Set the staking & reward token contract and owner of this smart contract.
@@ -50,7 +63,7 @@ contract Staking is Ownable {
      * @param amount amount of token to be staked
      * @param durationInMonths duration of staking in months 
      */
-    function stake(uint256 amount, uint256 durationInMonths) external {
+    function stake(uint256 amount, uint256 durationInMonths) external stakingEnabled {
 		// verify input argument
 		require(amount > 0, "cannot stake 0");
         // validate duration in months
@@ -75,6 +88,13 @@ contract Staking is Ownable {
 		emit Staked(msg.sender, amount, block.timestamp);
 	}
     
+    /**
+     * @notice Withdraw staked token
+     * 
+     * @dev when break the staking before time is up, the rewards will be removed
+     *
+     * @param index index of staking to withdraw
+     */
     function withdraw(uint256 index) external {
         // verify input argument
         require(index < userStakes[msg.sender].length, "Invalid index of staking");
@@ -82,12 +102,16 @@ contract Staking is Ownable {
         UserStake storage userStake = userStakes[msg.sender][index];
         require(userStake.amount > 0, "There is no staked token");
 
-        // if the staking is not 
+        // remove rewards if it breaks the staking before time is up
         if (block.timestamp < userStake.lockTime) {
             userStake.rewards = 0;
         }
 
         uint256 amount = userStake.amount;
+        userStake.amount = 0;
+
+        // update the total stake amount
+		totalSupply -= amount;
 		
         // transfer token from here to staker's wallet
         token.safeTransfer(msg.sender, amount);
@@ -96,6 +120,13 @@ contract Staking is Ownable {
         emit Withdrawed(msg.sender, amount, block.timestamp);
     }
 
+    /**
+     * @notice Claim the rewards about the staked token
+     * 
+     * @dev cannot claim the rewards for the not matured staking
+     * 
+     * @param index index of staking to claim rewards 
+     */
     function claimRewards(uint256 index) external {
         // verify input argument
         require(index < userStakes[msg.sender].length, "Invalid index of staking");
@@ -114,6 +145,14 @@ contract Staking is Ownable {
         emit Claimed(msg.sender, rewards, block.timestamp);
     }
 
+    /**
+     * @notice Calculate the amount of reward token based on the staking amount
+     * 
+     * @param _principal amount to be staked
+     * @param _durationInMonths duration to be staked in months
+     *
+     * @return amount of reward token
+     */
     function calculateRewards(uint256 _principal, uint256 _durationInMonths) private pure returns (uint256) {
         if (_durationInMonths <= 3) {
             return _principal * 10 / 100;
@@ -126,12 +165,37 @@ contract Staking is Ownable {
         }
     }
 
+    /**
+     * @notice Check a particular stake is still on the state of staking or not
+     * 
+     * @param staker address of staker
+     * @param index index of staking to be checked
+     *
+     * @return 
+     */
     function isStaked(address staker, uint256 index) public view returns(bool) {
         // verify input argument
         require(index <  userStakes[staker].length, "Invalidate index for staked records.");
 
         return userStakes[staker][index].lockTime > block.timestamp;
     }
+
+    /**
+	 * @dev Recovers ERC20 tokens accidentally sent to the contract
+     *
+	 * @param _token Address of the ERC20 token to recover
+	 * @param amount Amount of tokens to recover
+	 */
+	function recoverERC20(address _token, uint256 amount) external onlyOwner {
+		// make sure owner won't withdraw stake token
+		require(address(_token) != address(token), "cannot withdraw the staking token");
+
+		// transfer token to owner account
+		IERC20(_token).safeTransfer(owner(), amount);
+
+		// emit an event
+		emit Recovered(msg.sender, address(_token), amount);
+	}
 
     /*****************************************************
                             Getter
@@ -143,7 +207,7 @@ contract Staking is Ownable {
 	 * @param staker an address to query number of times it staked
 	 * @return number of times a particular address has staked
 	 */
-    function numStakes(address staker) public returns(uint256) {
+    function numStakes(address staker) public view returns(uint256) {
         return userStakes[staker].length;
     }
 
@@ -175,5 +239,17 @@ contract Staking is Ownable {
         require(_rewardToken != address(0), "Staking token address cannot be zero address");
 
         rewardToken = IERC20(_rewardToken);
+    }
+
+    /**
+     * @notice Enable staking; this is called by only owner.
+     * Owner will enable staking as soon as presale is over.
+     * 
+     * @dev Once staking become enable, cannot disable it back again.
+     */
+    function setStakingEnabled() external onlyOwner {
+        require(!stakingEnabled, "Staking is already enabled");
+
+        stakingEnabled = true;
     }
 }
