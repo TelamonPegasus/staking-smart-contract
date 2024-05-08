@@ -1,19 +1,15 @@
-## Foundry
-
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
-
-Foundry consists of:
-
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
-
-## Documentation
-
-https://book.getfoundry.sh/
-
-## Usage
+### Requirements
+solidity staking smart contract with following requirements:
+1. Users should be able to stake their tokens at any time. Including the presale tokens
+2. The staking should be available soon as the presale is over.
+3. Users can stake tokens in 1 month intervals with a maximum stake of 5 years.
+4. The APY will be calculated based on the number of months. With a cap of 50%
+    - 1Q 10%
+    - 2Q 25%
+    - 3Q 35%
+    - 4Q 50%
+5. If a user breaks the stake before the time is up, they lose all rewards earned up to that point
+6. The reward tokens can’t be claimed until the stake fully matures
 
 ### Build
 
