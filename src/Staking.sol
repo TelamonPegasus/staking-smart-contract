@@ -134,7 +134,7 @@ contract Staking is Ownable {
     function withdrawBatch(uint256 fromIndex, uint256 toIndex, bool onlyClaimable) external {
         uint256 length = numStakes(msg.sender);
         require(length > 0, "You didn't stake anything");
-        require(fromIndex <= toIndex, "Invalidate indexes.");
+        require(fromIndex <= toIndex, "Invalid indexes.");
         require(toIndex < length, "Index cannot be over the length of staking");
 
         _withdrawBatch(msg.sender, fromIndex, toIndex, onlyClaimable);
@@ -142,7 +142,10 @@ contract Staking is Ownable {
 
     function _withdrawBatch(address staker, uint256 _fromIndex, uint256 _toIndex, bool _onlyClaimable) private {
         for (uint256 i = _fromIndex; i <= _toIndex; ) {
-            if (_onlyClaimable && isStaked(msg.sender, i)) {
+            if (_onlyClaimable && isStaked(staker, i)) {
+                unchecked {
+                    ++i;
+                }
                 continue;
             }
 
@@ -232,7 +235,7 @@ contract Staking is Ownable {
      */
     function isStaked(address staker, uint256 index) public view returns(bool) {
         // verify input argument
-        require(index <  userStakes[staker].length, "Invalidate index for staked records.");
+        require(index <  userStakes[staker].length, "Invalid index for staked records.");
 
         return userStakes[staker][index].lockEnd > block.timestamp;
     }
@@ -300,7 +303,7 @@ contract Staking is Ownable {
      * @param _token address of the staking token to be updated
      */
     function setToken(address _token) external onlyOwner {
-        require(_token != address(0), "Staking token address cannot be zero address");
+        require(_token != address(0), "Stake token address cannot be zero address");
 
         token = IERC20(_token);
     }
@@ -313,7 +316,7 @@ contract Staking is Ownable {
      * @param _rewardToken address of the reward token to be updated
      */
     function setRewardToken(address _rewardToken) external onlyOwner {
-        require(_rewardToken != address(0), "Staking token address cannot be zero address");
+        require(_rewardToken != address(0), "Reward token address cannot be zero address");
 
         rewardToken = IERC20(_rewardToken);
     }
