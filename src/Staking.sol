@@ -34,7 +34,7 @@ contract Staking is Ownable {
     // Mapping to track user balances
     mapping(address => UserStake[]) private userStakes;
 
-    modifier stakingEnabled(uint256 role) {
+    modifier onlyWhenStakingEnabled() {
         // verify the staking enabled
         require(stakingEnabled, "Staking is not enabled.");
 
@@ -70,7 +70,7 @@ contract Staking is Ownable {
      * @param amount amount of token to be staked
      * @param durationInMonths duration of staking in months 
      */
-    function stake(uint256 amount, uint256 durationInMonths) external stakingEnabled {
+    function stake(uint256 amount, uint256 durationInMonths) external onlyWhenStakingEnabled {
         // verify input argument
         require(amount > 0, "cannot stake 0");
         // validate duration in months
@@ -84,7 +84,7 @@ contract Staking is Ownable {
         uint256 lockEnd = block.timestamp + (durationInMonths * 30 days);
         userStakes[msg.sender].push(UserStake({
             amount: amount,
-            lockOn: block.timestamp;
+            lockOn: block.timestamp,
             lockEnd: lockEnd,
             rewards: rewards
         }));
@@ -107,7 +107,7 @@ contract Staking is Ownable {
         // verify input argument
         require(index < userStakes[msg.sender].length, "Invalid index of staking");
         
-        _withdraw(msg.sender, index);
+        uint256 amount = _withdraw(msg.sender, index);
 
         // emit an event
         emit Withdrawed(msg.sender, amount, block.timestamp);
@@ -156,7 +156,7 @@ contract Staking is Ownable {
         }
     }
 
-    function _withdraw(address staker, uint256 index) private {
+    function _withdraw(address staker, uint256 index) private returns(uint256) {
         UserStake storage userStake = userStakes[staker][index];
         require(userStake.amount > 0, "There is no staked token");
 
@@ -173,6 +173,8 @@ contract Staking is Ownable {
 
         // transfer token from here to staker's wallet
         token.safeTransfer(staker, amount);
+
+        return amount;
     }
 
     /**
@@ -208,7 +210,7 @@ contract Staking is Ownable {
      *
      * @return amount of reward token
      */
-    function calculateRewards(uint256 _principal, uint256 _durationInMonths) private pure returns (uint256) {
+    function calculateRewards(uint256 _principal, uint256 _durationInMonths) private view returns (uint256) {
         if (_durationInMonths <= 3) {
             return _principal * REWARD_RATE_1Q / DENOMINATOR;
         } else if (_durationInMonths <= 6) {
@@ -271,16 +273,16 @@ contract Staking is Ownable {
      * 
      * @dev Only owner can call this function; should check non-zero address
      * 
-     * @param _token address of the staking token to be updated
+     * @param index index of staking to get the detail
      */
-    function getStakingInfo(uint256 index) public view returns(uint256, uint256, uint256, uint256) {
+    function getStakingInfo(address staker, uint256 index) public view returns(uint256, uint256, uint256, uint256) {
         // verify input argument
-        require(index < userStakes[msg.sender].length, "Invalid index for staked records.");
+        require(index < userStakes[staker].length, "Invalid index for staked records.");
 
-        UserStake storage userStake = userStakes[msg.sender][index];
+        UserStake storage userStake = userStakes[staker][index];
         return (
             userStake.amount,
-            userStake.lockStart,
+            userStake.lockOn,
             userStake.lockEnd,
             userStake.rewards
         );
