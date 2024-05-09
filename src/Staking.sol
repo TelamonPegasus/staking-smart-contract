@@ -6,10 +6,11 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 contract Staking is Ownable {
-	using SafeERC20 for IERC20;
+    using SafeERC20 for IERC20;
     struct UserStake {
         uint256 amount;
-        uint256 lockTime;
+        uint256 lockOn;
+        uint256 lockEnd;
         uint256 rewards;
     }
 
@@ -18,32 +19,38 @@ contract Staking is Ownable {
     // Token being rewarded
     IERC20 public rewardToken;
 
-	// Total supply of staked tokens
-	uint256 public totalSupply;
+    // Total supply of staked tokens
+    uint256 public totalSupply;
 
     // Value that represents whether staking is possible or not
     bool public stakingEnabled;
 
+    uint256 public REWARD_RATE_1Q = 1000;
+    uint256 public REWARD_RATE_2Q = 2500;
+    uint256 public REWARD_RATE_3Q = 3500;
+    uint256 public REWARD_RATE_4Q = 5000;
+    uint256 public DENOMINATOR = 10000;
+
     // Mapping to track user balances
-	mapping(address => UserStake[]) private userStakes;
+    mapping(address => UserStake[]) private userStakes;
 
-	modifier stakingEnabled(uint256 role) {
-		// verify the staking enabled
-		require(stakingEnabled, "Staking is not enabled.");
+    modifier stakingEnabled(uint256 role) {
+        // verify the staking enabled
+        require(stakingEnabled, "Staking is not enabled.");
 
-		// execute the rest of the function
-		_;
-	}
+        // execute the rest of the function
+        _;
+    }
 
     /* ========== EVENTS ========== */
-	// Event emitted when a user stakes token
-	event Staked(address indexed user, uint256 amount, uint256 time);
-	// Event emitted when a user withdraws token
-	event Withdrawed(address indexed user, uint256 amount, uint256 time);
-	// Event emitted when a user claims reward token
-	event Claimed(address indexed user, uint256 amount, uint256 time);
-	// Event emitted when tokens are recovered
-	event Recovered(address indexed sender, address token, uint256 amount);
+    // Event emitted when a user stakes token
+    event Staked(address indexed user, uint256 amount, uint256 time);
+    // Event emitted when a user withdraws token
+    event Withdrawed(address indexed user, uint256 amount, uint256 time);
+    // Event emitted when a user claims reward token
+    event Claimed(address indexed user, uint256 amount, uint256 time);
+    // Event emitted when tokens are recovered
+    event Recovered(address indexed sender, address token, uint256 amount);
 
     /**
      * @dev Set the staking & reward token contract and owner of this smart contract.
@@ -64,29 +71,30 @@ contract Staking is Ownable {
      * @param durationInMonths duration of staking in months 
      */
     function stake(uint256 amount, uint256 durationInMonths) external stakingEnabled {
-		// verify input argument
-		require(amount > 0, "cannot stake 0");
+        // verify input argument
+        require(amount > 0, "cannot stake 0");
         // validate duration in months
         require(durationInMonths > 0, "cannot stake for 0 days");
         require(durationInMonths <= 60, "cannot stake for over 5 years");
 
-		// transfer token from staker's wallet
-		token.safeTransferFrom(msg.sender, address(this), amount);
+        // transfer token from staker's wallet
+        token.safeTransferFrom(msg.sender, address(this), amount);
 
         uint256 rewards = calculateRewards(amount, durationInMonths);
-        uint256 lockTime = block.timestamp + (durationInMonths * 30 days);
+        uint256 lockEnd = block.timestamp + (durationInMonths * 30 days);
         userStakes[msg.sender].push(UserStake({
             amount: amount,
-            lockTime: lockTime,
+            lockOn: block.timestamp;
+            lockEnd: lockEnd,
             rewards: rewards
         }));
 
-		// update total stake amount
-		totalSupply += amount;
+        // update total stake amount
+        totalSupply += amount;
 
-		// emit an event
-		emit Staked(msg.sender, amount, block.timestamp);
-	}
+        // emit an event
+        emit Staked(msg.sender, amount, block.timestamp);
+    }
     
     /**
      * @notice Withdraw staked token
@@ -99,11 +107,61 @@ contract Staking is Ownable {
         // verify input argument
         require(index < userStakes[msg.sender].length, "Invalid index of staking");
         
-        UserStake storage userStake = userStakes[msg.sender][index];
+        _withdraw(msg.sender, index);
+
+        // emit an event
+        emit Withdrawed(msg.sender, amount, block.timestamp);
+    }
+
+    /**
+     * @notice withdraw all staked token;
+     * it is recommended to use withdrawBatch function than this fucntion
+     * 
+     * @param onlyClaimable bool value that represents whether will withdraw only claimable staking or not
+     */
+    function withdrawAll(bool onlyClaimable) external {
+        uint256 length = numStakes(msg.sender);
+        require(length > 0, "You didn't stake anything");
+
+        _withdrawBatch(msg.sender, 0, length-1, onlyClaimable);
+    }
+
+    /**
+     * @notice withdraw staked token between pointed indexes.
+     * 
+     * @param onlyClaimable bool value that represents whether will withdraw only claimable staking or not
+     */
+    function withdrawBatch(uint256 fromIndex, uint256 toIndex, bool onlyClaimable) external {
+        uint256 length = numStakes(msg.sender);
+        require(length > 0, "You didn't stake anything");
+        require(fromIndex <= toIndex, "Invalidate indexes.");
+        require(toIndex < length, "Index cannot be over the length of staking");
+
+        _withdrawBatch(msg.sender, fromIndex, toIndex, onlyClaimable);
+    }
+
+    function _withdrawBatch(address staker, uint256 _fromIndex, uint256 _toIndex, bool _onlyClaimable) private {
+        for (uint256 i = _fromIndex; i <= _toIndex; ) {
+            if (_onlyClaimable && isStaked(msg.sender, i)) {
+                continue;
+            }
+
+            if (userStakes[staker][i].amount > 0) {
+                _withdraw(staker, i);
+            }
+
+            unchecked {
+                ++i;
+            }
+        }
+    }
+
+    function _withdraw(address staker, uint256 index) private {
+        UserStake storage userStake = userStakes[staker][index];
         require(userStake.amount > 0, "There is no staked token");
 
         // remove rewards if it breaks the staking before time is up
-        if (block.timestamp < userStake.lockTime) {
+        if (block.timestamp < userStake.lockEnd) {
             userStake.rewards = 0;
         }
 
@@ -111,13 +169,10 @@ contract Staking is Ownable {
         userStake.amount = 0;
 
         // update the total stake amount
-		totalSupply -= amount;
-		
-        // transfer token from here to staker's wallet
-        token.safeTransfer(msg.sender, amount);
+        totalSupply -= amount;
 
-        // emit an event
-        emit Withdrawed(msg.sender, amount, block.timestamp);
+        // transfer token from here to staker's wallet
+        token.safeTransfer(staker, amount);
     }
 
     /**
@@ -155,13 +210,13 @@ contract Staking is Ownable {
      */
     function calculateRewards(uint256 _principal, uint256 _durationInMonths) private pure returns (uint256) {
         if (_durationInMonths <= 3) {
-            return _principal * 10 / 100;
+            return _principal * REWARD_RATE_1Q / DENOMINATOR;
         } else if (_durationInMonths <= 6) {
-            return _principal * 25 / 100;
+            return _principal * REWARD_RATE_2Q / DENOMINATOR;
         } else if (_durationInMonths <= 9) {
-            return _principal * 35 / 100;
+            return _principal * REWARD_RATE_3Q / DENOMINATOR;
         } else {
-            return _principal * 50 / 100;
+            return _principal * REWARD_RATE_4Q / DENOMINATOR;
         }
     }
 
@@ -177,38 +232,58 @@ contract Staking is Ownable {
         // verify input argument
         require(index <  userStakes[staker].length, "Invalidate index for staked records.");
 
-        return userStakes[staker][index].lockTime > block.timestamp;
+        return userStakes[staker][index].lockEnd > block.timestamp;
     }
 
     /**
-	 * @dev Recovers ERC20 tokens accidentally sent to the contract
+     * @dev Recovers ERC20 tokens accidentally sent to the contract
      *
-	 * @param _token Address of the ERC20 token to recover
-	 * @param amount Amount of tokens to recover
-	 */
-	function recoverERC20(address _token, uint256 amount) external onlyOwner {
-		// make sure owner won't withdraw stake token
-		require(address(_token) != address(token), "cannot withdraw the staking token");
+     * @param _token Address of the ERC20 token to recover
+     * @param amount Amount of tokens to recover
+     */
+    function recoverERC20(address _token, uint256 amount) external onlyOwner {
+        // make sure owner won't withdraw stake token
+        require(address(_token) != address(token), "cannot withdraw the staking token");
 
-		// transfer token to owner account
-		IERC20(_token).safeTransfer(owner(), amount);
+        // transfer token to owner account
+        IERC20(_token).safeTransfer(owner(), amount);
 
-		// emit an event
-		emit Recovered(msg.sender, address(_token), amount);
-	}
+        // emit an event
+        emit Recovered(msg.sender, address(_token), amount);
+    }
 
     /*****************************************************
                             Getter
     *****************************************************/
 
     /**
-	 * @notice How many stakes a particular address has done
-	 *
-	 * @param staker an address to query number of times it staked
-	 * @return number of times a particular address has staked
-	 */
+     * @notice How many stakes a particular address has done
+     *
+     * @param staker an address to query number of times it staked
+     * @return number of times a particular address has staked
+     */
     function numStakes(address staker) public view returns(uint256) {
         return userStakes[staker].length;
+    }
+
+    /**
+     * @notice Get the info of a particular staking
+     * 
+     * @dev Only owner can call this function; should check non-zero address
+     * 
+     * @param _token address of the staking token to be updated
+     */
+    function getStakingInfo(uint256 index) public view returns(uint256, uint256, uint256, uint256) {
+        // verify input argument
+        require(index < userStakes[msg.sender].length, "Invalid index for staked records.");
+
+        UserStake storage userStake = userStakes[msg.sender][index];
+        return (
+            userStake.amount,
+            userStake.lockStart,
+            userStake.lockEnd,
+            userStake.rewards
+        );
     }
 
     /*****************************************************
