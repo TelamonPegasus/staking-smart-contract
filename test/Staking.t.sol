@@ -69,7 +69,12 @@ contract StakingEnableTest is StakingBaseTest {
 
     function test_stake(uint8 _amount, uint8 _durationInMonths) public {
         vm.assume(_amount <= 100 && _amount >= 1);
-        vm.assume(_durationInMonths <= 60 && _durationInMonths >= 1);
+        vm.assume(
+            _durationInMonths == 3 ||
+            _durationInMonths == 6 ||
+            _durationInMonths == 9 ||
+            _durationInMonths == 12
+        );
         uint256 amount = uint256(_amount) * 1 ether;
         
         vm.startPrank(alice);
@@ -93,21 +98,31 @@ contract StakingEnableTest is StakingBaseTest {
     }
 
     function test_stakeRevertInvalidDurationMonth(uint256 _durationInMonths) public {
-        vm.assume(_durationInMonths > 60);
+        vm.assume(
+            _durationInMonths != 3 &&
+            _durationInMonths != 6 &&
+            _durationInMonths != 9 &&
+            _durationInMonths != 12
+        );
 
         vm.startPrank(alice);
         stakeToken.approve(address(staking), 1 ether);
-        vm.expectRevert("cannot stake for 0 days");
-        staking.stake(1 ether, 0);
+        // vm.expectRevert("cannot stake for 0 days");
+        // staking.stake(1 ether, 0);
 
-        vm.expectRevert("cannot stake for over 5 years");
+        vm.expectRevert("Invalid duration for staking.");
         staking.stake(1 ether, _durationInMonths);
         vm.stopPrank();
     }
 
     function test_withdraw(uint8 _amount, uint8 _durationInMonths) public {
         vm.assume(_amount <= 100 && _amount >= 1);
-        vm.assume(_durationInMonths <= 60 && _durationInMonths >= 1);
+        vm.assume(
+            _durationInMonths == 3 ||
+            _durationInMonths == 6 ||
+            _durationInMonths == 9 ||
+            _durationInMonths == 12
+        );
         uint256 amount = uint256(_amount) * 1 ether;
         
         vm.startPrank(alice);
@@ -141,7 +156,12 @@ contract StakingEnableTest is StakingBaseTest {
 
     function test_withdrawRemoveRewardsBeforeTimeisUp(uint8 _amount, uint8 _durationInMonths) public {
         vm.assume(_amount <= 100 && _amount >= 1);
-        vm.assume(_durationInMonths <= 60 && _durationInMonths >= 1);
+        vm.assume(
+            _durationInMonths == 3 ||
+            _durationInMonths == 6 ||
+            _durationInMonths == 9 ||
+            _durationInMonths == 12
+        );
         uint256 amount = uint256(_amount) * 1 ether;
         
         vm.startPrank(alice);
@@ -177,7 +197,12 @@ contract StakingEnableTest is StakingBaseTest {
 
     function test_claimRewards(uint8 _amount, uint8 _durationInMonths) public {
         vm.assume(_amount <= 100 && _amount >= 1);
-        vm.assume(_durationInMonths <= 60 && _durationInMonths >= 1);
+        vm.assume(
+            _durationInMonths == 3 ||
+            _durationInMonths == 6 ||
+            _durationInMonths == 9 ||
+            _durationInMonths == 12
+        );
         uint256 amount = uint256(_amount) * 1 ether;
         
         vm.startPrank(alice);
