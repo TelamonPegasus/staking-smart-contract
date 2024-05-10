@@ -25,11 +25,11 @@ contract Staking is Ownable {
     // Value that represents whether staking is possible or not
     bool public stakingEnabled;
 
-    uint256 public REWARD_RATE_1Q = 1000;
-    uint256 public REWARD_RATE_2Q = 2500;
-    uint256 public REWARD_RATE_3Q = 3500;
-    uint256 public REWARD_RATE_4Q = 5000;
-    uint256 public DENOMINATOR = 10000;
+    uint256 public REWARD_RATE_1Q = 1_000;
+    uint256 public REWARD_RATE_2Q = 2_500;
+    uint256 public REWARD_RATE_3Q = 3_500;
+    uint256 public REWARD_RATE_4Q = 5_000;
+    uint256 public DENOMINATOR = 10_000;
 
     // Mapping to track user balances
     mapping(address => UserStake[]) private userStakes;
@@ -120,7 +120,7 @@ contract Staking is Ownable {
 
     /**
      * @notice withdraw all staked token;
-     * it is recommended to use withdrawBatch function than this fucntion
+     * it is recommended to use withdrawBatch function than this.
      * 
      * @param onlyClaimable bool value that represents whether will withdraw only claimable staking or not
      */
