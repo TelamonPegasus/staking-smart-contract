@@ -25,11 +25,11 @@ contract Staking is Ownable {
     // Value that represents whether staking is possible or not
     bool public stakingEnabled;
 
-    uint256 public REWARD_RATE_1Q = 1000;
-    uint256 public REWARD_RATE_2Q = 2500;
-    uint256 public REWARD_RATE_3Q = 3500;
-    uint256 public REWARD_RATE_4Q = 5000;
-    uint256 public DENOMINATOR = 10000;
+    uint256 public REWARD_RATE_1Q = 1_000;
+    uint256 public REWARD_RATE_2Q = 2_500;
+    uint256 public REWARD_RATE_3Q = 3_500;
+    uint256 public REWARD_RATE_4Q = 5_000;
+    uint256 public DENOMINATOR = 10_000;
 
     // Mapping to track user balances
     mapping(address => UserStake[]) private userStakes;
@@ -74,8 +74,13 @@ contract Staking is Ownable {
         // verify input argument
         require(amount > 0, "cannot stake 0");
         // validate duration in months
-        require(durationInMonths > 0, "cannot stake for 0 days");
-        require(durationInMonths <= 60, "cannot stake for over 5 years");
+        require(
+            durationInMonths == 3 ||
+            durationInMonths == 6 ||
+            durationInMonths == 9 ||
+            durationInMonths == 12,
+            "Invalid duration for staking."
+        );
 
         // transfer token from staker's wallet
         token.safeTransferFrom(msg.sender, address(this), amount);
@@ -115,7 +120,7 @@ contract Staking is Ownable {
 
     /**
      * @notice withdraw all staked token;
-     * it is recommended to use withdrawBatch function than this fucntion
+     * it is recommended to use withdrawBatch function than this.
      * 
      * @param onlyClaimable bool value that represents whether will withdraw only claimable staking or not
      */
@@ -214,14 +219,17 @@ contract Staking is Ownable {
      * @return amount of reward token
      */
     function calculateRewards(uint256 _principal, uint256 _durationInMonths) private view returns (uint256) {
+        uint256 stakeDenominator = 10 ** 18; // temporary value
+        uint256 rewardDenominator = 10 ** 18; // temporary value
+
         if (_durationInMonths <= 3) {
-            return _principal * REWARD_RATE_1Q / DENOMINATOR;
+            return _principal * rewardDenominator * REWARD_RATE_1Q / (DENOMINATOR * stakeDenominator);
         } else if (_durationInMonths <= 6) {
-            return _principal * REWARD_RATE_2Q / DENOMINATOR;
+            return _principal * rewardDenominator * REWARD_RATE_2Q / (DENOMINATOR * stakeDenominator);
         } else if (_durationInMonths <= 9) {
-            return _principal * REWARD_RATE_3Q / DENOMINATOR;
+            return _principal * rewardDenominator * REWARD_RATE_3Q / (DENOMINATOR * stakeDenominator);
         } else {
-            return _principal * REWARD_RATE_4Q / DENOMINATOR;
+            return _principal * rewardDenominator * REWARD_RATE_4Q / (DENOMINATOR * stakeDenominator);
         }
     }
 
