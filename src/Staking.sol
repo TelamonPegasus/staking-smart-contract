@@ -362,9 +362,24 @@ contract Staking is Ownable {
      * @param _rewardToken address of the reward token to be updated
      */
     function setRewardToken(address _rewardToken) external onlyOwner {
+        // verify input argument
         require(_rewardToken != address(0), "Reward token address cannot be zero address");
 
         rewardToken = IERC20(_rewardToken);
+    }
+
+    /**
+     * @notice Set the address of claiming contract
+     * 
+     * @dev Only owner can call this function; should check non-zero address
+     * 
+     * @param _claiming address of the claiming contract
+     */
+    function setClaimingContract(address _claiming) external onlyOwner {
+        // verify input argument
+        require(_claiming != address(0), "Reward token address cannot be zero address");
+
+        claiming = _claiming;
     }
 
     /**
