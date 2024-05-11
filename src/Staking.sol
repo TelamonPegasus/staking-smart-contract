@@ -18,6 +18,8 @@ contract Staking is Ownable {
     IERC20 public token;
     // Token being rewarded
     IERC20 public rewardToken;
+    // Claiming contract address
+    address public claiming;
 
     // Total supply of staked tokens
     uint256 public totalSupply;
@@ -45,6 +47,8 @@ contract Staking is Ownable {
     /* ========== EVENTS ========== */
     // Event emitted when a user stakes token
     event Staked(address indexed user, uint256 amount, uint256 time);
+    // Event emitted when a user stakes token fron claiming directly
+    event StakedDirectly(address indexed user, uint256 amount, uint256 time);
     // Event emitted when a user withdraws token
     event Withdrawed(address indexed user, uint256 amount, uint256 time);
     // Event emitted when a user claims reward token
@@ -100,6 +104,40 @@ contract Staking is Ownable {
         // emit an event
         emit Staked(msg.sender, amount, block.timestamp);
     }
+
+    function stakeFromClaiming(address staker, uint256 amount, uint256 durationInMonths) external {
+        // verify caller is claiming contract
+        require(msg.sender == claiming, "Only claiming contract can call this function");
+
+        // verify input argument
+        require(amount > 0, "cannot stake 0");
+        // validate duration in months
+        require(
+            durationInMonths == 3 ||
+            durationInMonths == 6 ||
+            durationInMonths == 9 ||
+            durationInMonths == 12,
+            "Invalid duration for staking."
+        );
+
+        // transfer token from staker's wallet
+        token.safeTransferFrom(staker, address(this), amount);
+
+        uint256 rewards = calculateRewards(amount, durationInMonths);
+        uint256 lockEnd = block.timestamp + (durationInMonths * 30 days);
+        userStakes[staker].push(UserStake({
+            amount: amount,
+            lockOn: block.timestamp,
+            lockEnd: lockEnd,
+            rewards: rewards
+        }));
+
+        // update total stake amount
+        totalSupply += amount;
+
+        // emit an event
+        emit StakedDirectly(staker, amount, block.timestamp);
+    }
     
     /**
      * @notice Withdraw staked token
@@ -108,7 +146,7 @@ contract Staking is Ownable {
      *
      * @param index index of staking to withdraw
      */
-    function withdraw(uint256 index) external {
+    function withdraw(uint256 index) external onlyWhenStakingEnabled {
         // verify input argument
         require(index < userStakes[msg.sender].length, "Invalid index of staking");
         
@@ -124,7 +162,7 @@ contract Staking is Ownable {
      * 
      * @param onlyClaimable bool value that represents whether will withdraw only claimable staking or not
      */
-    function withdrawAll(bool onlyClaimable) external {
+    function withdrawAll(bool onlyClaimable) external onlyWhenStakingEnabled {
         uint256 length = numStakes(msg.sender);
         require(length > 0, "You didn't stake anything");
 
@@ -136,7 +174,7 @@ contract Staking is Ownable {
      * 
      * @param onlyClaimable bool value that represents whether will withdraw only claimable staking or not
      */
-    function withdrawBatch(uint256 fromIndex, uint256 toIndex, bool onlyClaimable) external {
+    function withdrawBatch(uint256 fromIndex, uint256 toIndex, bool onlyClaimable) external onlyWhenStakingEnabled {
         uint256 length = numStakes(msg.sender);
         require(length > 0, "You didn't stake anything");
         require(fromIndex <= toIndex, "Invalid indexes.");
@@ -324,9 +362,24 @@ contract Staking is Ownable {
      * @param _rewardToken address of the reward token to be updated
      */
     function setRewardToken(address _rewardToken) external onlyOwner {
+        // verify input argument
         require(_rewardToken != address(0), "Reward token address cannot be zero address");
 
         rewardToken = IERC20(_rewardToken);
+    }
+
+    /**
+     * @notice Set the address of claiming contract
+     * 
+     * @dev Only owner can call this function; should check non-zero address
+     * 
+     * @param _claiming address of the claiming contract
+     */
+    function setClaimingContract(address _claiming) external onlyOwner {
+        // verify input argument
+        require(_claiming != address(0), "Reward token address cannot be zero address");
+
+        claiming = _claiming;
     }
 
     /**
