@@ -3,11 +3,13 @@ pragma solidity ^0.8.13;
 
 import {Test, console} from "forge-std/Test.sol";
 import {Staking} from "../src/Staking.sol";
+import {Claiming} from "../src/Claiming.sol";
 import {MockERC20} from "forge-std/mocks/MockERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-contract StakingBaseTest is Test {
+contract BaseTest is Test {
     Staking public staking;
+    Claiming public claiming;
 
     address public alice = makeAddr("Alice");
 
@@ -27,6 +29,7 @@ contract StakingBaseTest is Test {
         rewardToken = new MockERC20();
 
         staking = new Staking(address(stakeToken), address(rewardToken));
+        claiming = new Claiming(address(stakeToken));
 
         REWARD_RATE_1Q = staking.REWARD_RATE_1Q();
         REWARD_RATE_2Q = staking.REWARD_RATE_2Q();
@@ -36,7 +39,7 @@ contract StakingBaseTest is Test {
     }
 }
 
-contract StakingDisableTest is StakingBaseTest {
+contract StakingDisableTest is BaseTest {
     function setUp() public override {
         super.setUp();
     }
@@ -58,7 +61,7 @@ contract StakingDisableTest is StakingBaseTest {
     }
 }
 
-contract StakingEnableTest is StakingBaseTest {
+contract StakingEnableTest is BaseTest {
     function setUp() public override {
         super.setUp();
 

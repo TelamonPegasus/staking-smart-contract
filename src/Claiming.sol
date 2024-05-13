@@ -52,13 +52,11 @@ contract Claiming is Ownable {
         _;
     }
 
-    constructor(address _token, address _staking) Ownable(msg.sender) {
+    constructor(address _token) Ownable(msg.sender) {
         // verify input argument
         require(_token != address(0), "Token address cannot be zero.");
-        require(_staking != address(_staking), "Staking contract cannot be zero address");
 
         token = IERC20(_token);
-        staking = _staking;
 
         // add empty element into claim info array for comfortable index
         claimInfos.push(ClaimInfo({
@@ -90,7 +88,7 @@ contract Claiming is Ownable {
      */
     function setStakingContract(address _staking) external onlyOwner {
         // verify input argument
-        require(address(token) != address(0), "Staking contract cannot be zero address.");
+        require(address(_staking) != address(0), "Staking contract cannot be zero address.");
 
         staking = _staking;
     }
