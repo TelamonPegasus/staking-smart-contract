@@ -28,7 +28,7 @@ contract Claiming is Ownable {
     ClaimInfo[] private claimInfos;
 
     // claim info index
-    mapping(address => uint256) public claimInfoIndex;
+    mapping(address => uint256) private claimInfoIndex;
 
     /* ========== EVENTS ========== */
     // Event emitted when a owner deposits token
@@ -52,13 +52,11 @@ contract Claiming is Ownable {
         _;
     }
 
-    constructor(address _token, address _staking) Ownable(msg.sender) {
+    constructor(address _token) Ownable(msg.sender) {
         // verify input argument
         require(_token != address(0), "Token address cannot be zero.");
-        require(_staking != address(_staking), "Staking contract cannot be zero address");
 
         token = IERC20(_token);
-        staking = _staking;
 
         // add empty element into claim info array for comfortable index
         claimInfos.push(ClaimInfo({
@@ -90,7 +88,7 @@ contract Claiming is Ownable {
      */
     function setStakingContract(address _staking) external onlyOwner {
         // verify input argument
-        require(address(token) != address(0), "Staking contract cannot be zero address.");
+        require(address(_staking) != address(0), "Staking contract cannot be zero address.");
 
         staking = _staking;
     }
@@ -111,6 +109,8 @@ contract Claiming is Ownable {
 
     /**
      * @notice Set the detail of entry that can claim token
+     *
+     * @dev allow claim 0 amount
      *
      * @param user address of the user
      * @param amount amount of the claim
@@ -149,7 +149,7 @@ contract Claiming is Ownable {
     function setClaimBatch(address[] calldata users, uint256[] calldata amounts) external onlyOwner {
         // verify input argment arrays' length
         require(users.length != 0, "Invalid input array's length.");
-        require(users.length <= MAX_BATCH_SET_CLAIM, "Invalid input array's length .");
+        require(users.length <= MAX_BATCH_SET_CLAIM, "Invalid input array's length.");
         require(users.length == amounts.length, "The length of arrays for users and amounts should be same.");
 
         for(uint256 i = 0; i < users.length; ) {
@@ -197,7 +197,7 @@ contract Claiming is Ownable {
      */
     function deposit(uint256 amount) external onlyOwner {
         // verify input argument
-        require(amount > 0, "Cannot deposit zero amount.");
+        require(amount > 0, "Cannot deposit zero amount");
 
         token.safeTransferFrom(msg.sender, address(this), amount);
 
@@ -301,6 +301,15 @@ contract Claiming is Ownable {
     }
 
     /**
+     * @notice get the index in claim info array of particular user
+     * 
+     * @param user address to get the index of claim info
+     */
+    function getClaimInfoIndex(address user) public view returns(uint256) {
+        return claimInfoIndex[user];
+    }
+
+    /**
      * @notice get the claim info at the particular index
      * 
      * @dev avoid first empty element of the array
@@ -308,7 +317,7 @@ contract Claiming is Ownable {
      * @param index index to get the claim info
      */
     function getClaimInfo(uint256 index) public view returns(address user, uint256 amount) {
-        require(index > 0, "Invalid start index"); // should avoid first empty element
+        require(index != 0, "Invalid start index"); // should avoid first empty element
         require(index < claimInfos.length, "Invalid index value");
 
         return (claimInfos[index].user, claimInfos[index].amount);

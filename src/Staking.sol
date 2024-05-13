@@ -109,8 +109,6 @@ contract Staking is Ownable {
         // verify caller is claiming contract
         require(msg.sender == claiming, "Only claiming contract can call this function");
 
-        // verify input argument
-        require(amount > 0, "cannot stake 0");
         // validate duration in months
         require(
             durationInMonths == 3 ||
@@ -121,7 +119,7 @@ contract Staking is Ownable {
         );
 
         // transfer token from staker's wallet
-        token.safeTransferFrom(staker, address(this), amount);
+        token.safeTransferFrom(msg.sender, address(this), amount);
 
         uint256 rewards = calculateRewards(amount, durationInMonths);
         uint256 lockEnd = block.timestamp + (durationInMonths * 30 days);
