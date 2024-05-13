@@ -19,8 +19,16 @@ contract Claiming is Ownable {
     // maximum array length for set batch claim info
     uint256 public MAX_BATCH_SET_CLAIM = 1_000;
 
-    // purchased presale token
-    mapping(address => uint256) public claims;
+    struct ClaimInfo {
+        address user;
+        uint256 amount;
+    }
+
+    // claim info array
+    ClaimInfo[] private claimInfos;
+
+    // claim info index
+    mapping(address => uint256) public claimInfoIndex;
 
     /* ========== EVENTS ========== */
     // Event emitted when a owner deposits token
@@ -51,6 +59,12 @@ contract Claiming is Ownable {
 
         token = IERC20(_token);
         staking = _staking;
+
+        // add empty element into claim info array for comfortable index
+        claimInfos.push(ClaimInfo({
+            user: address(0),
+            amount: 0
+        }));
     }
 
     /******************************************************
@@ -105,8 +119,23 @@ contract Claiming is Ownable {
         // verify input argument
         require(user != address(0), "User address cannot be zero.");
 
-        uint256 previousAmount = claims[user];
-        claims[user] = amount;
+        uint256 previousAmount;
+
+        uint256 index = claimInfoIndex[user];
+        if (index > 0) {
+            // update previous claim data
+            ClaimInfo storage claimInfo = claimInfos[index];
+            previousAmount = claimInfo.amount;
+            claimInfo.amount = amount;
+        } else {
+            // push new user's claim info
+            previousAmount = 0;
+            claimInfoIndex[user] = claimInfos.length;
+            claimInfos.push(ClaimInfo({
+                user: user,
+                amount: amount
+            }));
+        }
 
         emit ClaimInfoUpdated(user, previousAmount, amount, block.timestamp);
     }
@@ -129,8 +158,23 @@ contract Claiming is Ownable {
             require(user != address(0), "User address cannot be zero.");
             uint256 amount = amounts[i];
 
-            uint256 previousAmount = claims[user];
-            claims[user] = amount;
+            uint256 previousAmount;
+
+            uint256 index = claimInfoIndex[user];
+            if (index > 0) {
+                // update previous claim data
+                ClaimInfo storage claimInfo = claimInfos[index];
+                previousAmount = claimInfo.amount;
+                claimInfo.amount = amount;
+            } else {
+                // push new user's claim info
+                previousAmount = 0;
+                claimInfoIndex[user] = claimInfos.length;
+                claimInfos.push(ClaimInfo({
+                    user: user,
+                    amount: amount
+                }));
+            }
 
             unchecked {
                 ++i;
@@ -189,9 +233,11 @@ contract Claiming is Ownable {
         require(amount != 0, "Cannot claim zero amount");
         require(beneficiary != address(0), "Cannot claim to zero address");
         // verify claimable amount
-        require(amount <= claims[msg.sender], "Insufficient claimable amount");
+        uint256 index = claimInfoIndex[msg.sender];
+        ClaimInfo storage claimInfo = claimInfos[index];
+        require(amount <= claimInfo.amount, "Insufficient claimable amount");
 
-        claims[msg.sender] -= amount;
+        claimInfo.amount -= amount;
 
         token.safeTransfer(beneficiary, amount);
 
@@ -212,9 +258,11 @@ contract Claiming is Ownable {
         // verify staking contract address is valid
         require(staking != address(0), "Invalid staking address");
         // verify claimable amount
-        require(amount <= claims[msg.sender], "Insufficient claimable amount");
+        uint256 index = claimInfoIndex[msg.sender];
+        ClaimInfo storage claimInfo = claimInfos[index];
+        require(amount <= claimInfo.amount, "Insufficient claimable amount");
 
-        claims[msg.sender] -= amount;
+        claimInfo.amount -= amount;
         token.approve(staking, amount);
 
         Staking(staking).stakeFromClaiming(msg.sender, amount, durationInMonths);
@@ -239,6 +287,56 @@ contract Claiming is Ownable {
      * @param user the address of user to need to get the detail
      */
     function getClaimableAmount(address user) public view returns(uint256) {
-        return claims[user];
+        uint256 index = claimInfoIndex[user];
+        return claimInfos[index].amount;
+    }
+
+    /**
+     * @notice get the actual claims array length
+     * 
+     * @dev avoid first empty element of the array
+     */
+    function getClaimInfoLength() public view returns(uint256) {
+        return claimInfos.length - 1;
+    }
+
+    /**
+     * @notice get the claim info at the particular index
+     * 
+     * @dev avoid first empty element of the array
+     *
+     * @param index index to get the claim info
+     */
+    function getClaimInfo(uint256 index) public view returns(address user, uint256 amount) {
+        require(index > 0, "Invalid start index"); // should avoid first empty element
+        require(index < claimInfos.length, "Invalid index value");
+
+        return (claimInfos[index].user, claimInfos[index].amount);
+    }
+
+    /**
+     * @notice get the array of claim info between particular indexes
+     * 
+     * @dev avoid first empty element of the array
+     *
+     * @param fromIndex start index; should be greater than 0 (to avoid first empty element)
+     * @param toIndex end index
+     */
+
+    function getClaimInfoArray(uint256 fromIndex, uint256 toIndex) public view returns(ClaimInfo[] memory) {
+        uint256 length = claimInfos.length;
+        require(fromIndex > 0, "Invalid start index"); // should avoid first empty element
+        require(fromIndex <= toIndex, "Invalid indexes.");
+        require(toIndex < length, "Index cannot be over the length of staking");
+
+        ClaimInfo[] memory returnClaimInfo = new ClaimInfo[](toIndex - fromIndex + 1);
+        for (uint256 i = fromIndex; i <= toIndex; ) {
+            returnClaimInfo[i - fromIndex] = claimInfos[i];
+            unchecked {
+                ++i;
+            }
+        }
+
+        return returnClaimInfo;
     }
 }
