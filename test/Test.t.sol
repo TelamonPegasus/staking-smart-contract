@@ -84,7 +84,12 @@ contract ClaimingBaseTest is BaseTest {
     function test_setClaimRevertNotOwner() public {
         vm.prank(alice);
         vm.expectRevert();
-        claiming.setClaim(alice, 100000);
+        claiming.setClaim(alice, 1 ether);
+    }
+
+    function test_setClaimRevertZeroAddress() public {
+        vm.expectRevert("User address cannot be zero.");
+        claiming.setClaim(address(0), 1 ether);
     }
 
     function test_setClaim() public {
@@ -94,6 +99,14 @@ contract ClaimingBaseTest is BaseTest {
         assertEq(index, 1);
         uint256 amount = claiming.getClaimableAmount(alice);
         assertEq(amount, 1 ether);
+
+        claiming.setClaim(alice, 2 ether);
+
+        index = claiming.getClaimInfoIndex(alice);
+        assertEq(index, 1);
+        amount = claiming.getClaimableAmount(alice);
+        assertEq(amount, 2 ether);
+
     }
 
     function test_setClaimBatchRevertZeroArray() public {
