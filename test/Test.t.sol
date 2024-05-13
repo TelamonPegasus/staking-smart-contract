@@ -12,6 +12,7 @@ contract BaseTest is Test {
     Claiming public claiming;
 
     address public alice = makeAddr("Alice");
+    address public bob = makeAddr("Bob");
 
     uint256 public REWARD_RATE_1Q;
     uint256 public REWARD_RATE_2Q;
@@ -36,6 +37,321 @@ contract BaseTest is Test {
         REWARD_RATE_3Q = staking.REWARD_RATE_3Q();
         REWARD_RATE_4Q = staking.REWARD_RATE_4Q();
         DENOMINATOR = staking.DENOMINATOR();
+    }
+}
+
+contract ClaimingBaseTest is BaseTest {
+    function setUp() public override {
+        super.setUp();
+
+        claiming.setClaimStart(block.timestamp + 5 days);
+    }
+
+    function test_setTokenRevertZeroAddress() public {
+        vm.expectRevert("Token address cannot be zero.");
+        claiming.setToken(address(0));
+    }
+
+    function test_setToken() public {
+        MockERC20 newMockERC20 = new MockERC20();
+
+        claiming.setToken(address(newMockERC20));
+        assertEq(address(claiming.token()), address(newMockERC20));
+    }
+
+    function test_setStakingRevertZeroAddress() public {
+        vm.expectRevert("Staking contract cannot be zero address.");
+        claiming.setStakingContract(address(0));
+    }
+
+    function test_setStaking() public {
+        claiming.setStakingContract(address(staking));
+        assertEq(claiming.staking(), address(staking));
+    }
+
+    function test_setClaimStartRevertInvalid() public {
+        vm.expectRevert("Invalid time for start claiming.");
+        claiming.setClaimStart(0);
+    }
+
+    function test_setClaimStart(uint8 startDay) public {
+        vm.assume(startDay > 0);
+        uint256 startTime = uint256(startDay) * 1 days;
+        claiming.setClaimStart(block.timestamp + startTime);
+        assertGt(claiming.claimStart(), block.timestamp);
+    }
+
+    function test_setClaimRevertNotOwner() public {
+        vm.prank(alice);
+        vm.expectRevert();
+        claiming.setClaim(alice, 100000);
+    }
+
+    function test_setClaim() public {
+        claiming.setClaim(alice, 1 ether);
+
+        uint256 index = claiming.getClaimInfoIndex(alice);
+        assertEq(index, 1);
+        uint256 amount = claiming.getClaimableAmount(alice);
+        assertEq(amount, 1 ether);
+    }
+
+    function test_setClaimBatchRevertZeroArray() public {
+        address[] memory users = new address[](0);
+        uint256[] memory amounts = new uint256[](0);
+
+        vm.expectRevert("Invalid input array's length.");
+        claiming.setClaimBatch(users, amounts);
+    }
+
+    function test_setClaimBatchRevertWrongMaxLength() public {
+        address[] memory users = new address[](claiming.MAX_BATCH_SET_CLAIM() + 1);
+        uint256[] memory amounts = new uint256[](claiming.MAX_BATCH_SET_CLAIM() + 1);
+
+        vm.expectRevert("Invalid input array's length.");
+        claiming.setClaimBatch(users, amounts);
+    }
+
+    function test_setClaimBatchRevertWrongLength() public {
+        address[] memory users = new address[](10);
+        uint256[] memory amounts = new uint256[](11);
+
+        vm.expectRevert("The length of arrays for users and amounts should be same.");
+        claiming.setClaimBatch(users, amounts);
+    }
+
+    function test_setClaimBatch() public {
+        address[] memory users = new address[](3);
+        uint256[] memory amounts = new uint256[](3);
+
+        users[0] = alice;
+        users[1] = bob;
+        users[2] = alice; // test for overwriting previous info
+        amounts[0] = 1 ether;
+        amounts[1] = 2 ether;
+        amounts[2] = 1.5 ether;
+
+        claiming.setClaimBatch(users, amounts);
+        assertEq(claiming.getClaimInfoIndex(alice), 1);
+        assertEq(claiming.getClaimInfoIndex(bob), 2);
+        assertEq(claiming.getClaimableAmount(alice), 1.5 ether);
+        assertEq(claiming.getClaimableAmount(bob), 2 ether);
+    }
+
+    function test_setDepositRevertZeroAmount() public {
+        vm.expectRevert("Cannot deposit zero amount");
+        claiming.deposit(0);
+    }
+
+    function test_withdrawRevertZeroAmount() public {
+        vm.expectRevert("Cannot withdraw zero amount");
+        claiming.withdraw(0);
+    }
+
+    function test_depositAndWithdraw() public {
+        deal(address(stakeToken), address(this), 200 ether);
+        stakeToken.approve(address(claiming), 100 ether);
+        claiming.deposit(100 ether);
+
+        assertEq(claiming.getTotalDeposits(), 100 ether);
+
+        claiming.withdraw(40 ether);
+        assertEq(claiming.getTotalDeposits(), 60 ether);
+        assertEq(stakeToken.balanceOf(address(this)), 140 ether);
+    }
+
+    function test_claimRevertBeforeClaimStart() public {
+        deal(address(stakeToken), address(this), 200 ether);
+        stakeToken.approve(address(claiming), 100 ether);
+        claiming.deposit(100 ether);
+
+        claiming.setClaim(alice, 1 ether);
+
+        vm.prank(alice);
+        vm.expectRevert("Claiming is not able now.");
+        claiming.claim(alice, 0.5 ether);
+    }
+}
+
+contract ClaimingTest is BaseTest {
+    function setUp() public override {
+        super.setUp();
+
+        claiming.setClaimStart(block.timestamp + 5 days);
+
+        deal(address(stakeToken), address(this), 200 ether);
+        stakeToken.approve(address(claiming), 200 ether);
+        claiming.deposit(200 ether);
+        claiming.setClaim(alice, 5 ether);
+        claiming.setClaim(bob, 2 ether);
+
+        vm.warp(block.timestamp + 6 days);
+    }
+
+    function test_getClaimInfoLength() public view {
+        assertEq(claiming.getClaimInfoLength(), 2);
+    }
+
+    function test_getClaimInfoRevertZeroIndex() public {
+        vm.expectRevert("Invalid start index");
+        claiming.getClaimInfo(0);
+    }
+
+    function test_getClaimInfoRevertInvalidIndex(uint256 index) public {
+        vm.assume(index > 2);
+        vm.expectRevert();
+        claiming.getClaimInfo(index);
+    }
+
+    function test_getClaimInfoArrayRevertZeroFromIndex() public {
+        vm.expectRevert("Invalid start index");
+        claiming.getClaimInfoArray(0, 1);
+    }
+
+    function test_getClaimInfoArrayInvalidIndexes() public {
+        vm.expectRevert("Invalid indexes.");
+        claiming.getClaimInfoArray(1, 0);
+    }
+
+    function test_getClaimInfoArrayInvalidToIndex() public {
+        vm.expectRevert("Index cannot be over the length of staking");
+        claiming.getClaimInfoArray(1, 3);
+    }
+
+    function test_getClaimInfoArray() public view {
+        Claiming.ClaimInfo[] memory claimInfoArray = new Claiming.ClaimInfo[](2);
+        claimInfoArray = claiming.getClaimInfoArray(1, 2);
+        assertEq(claimInfoArray[0].user, alice);
+        assertEq(claimInfoArray[1].user, bob);
+        assertEq(claimInfoArray[0].amount, 5 ether);
+        assertEq(claimInfoArray[1].amount, 2 ether);
+    }
+
+    function test_claimRevertZeroAmount() public {
+        vm.prank(alice);
+        vm.expectRevert("Cannot claim zero amount");
+        claiming.claim(alice, 0);
+    }
+
+    function test_claimRevertZeroAddressDestination() public {
+        vm.prank(alice);
+        vm.expectRevert("Cannot claim to zero address");
+        claiming.claim(address(0), 1 ether);
+    }
+
+    function test_claimRevertInsufficientAmount() public {
+        vm.prank(alice);
+        vm.expectRevert("Insufficient claimable amount");
+        claiming.claim(alice, 5.1 ether);
+    }
+
+    function test_claim() public {
+        vm.startPrank(alice);
+        claiming.claim(alice, 1 ether);
+        claiming.claim(bob, 2 ether);
+        vm.stopPrank();
+
+        vm.prank(bob);
+        claiming.claim(bob, 1.5 ether);
+
+        assertEq(claiming.getClaimableAmount(alice), 2 ether);
+        assertEq(claiming.getClaimableAmount(bob), 0.5 ether);
+
+        assertEq(stakeToken.balanceOf(alice), 1 ether);
+        assertEq(stakeToken.balanceOf(bob), 3.5 ether);
+        assertEq(stakeToken.balanceOf(address(claiming)), 195.5 ether);
+    }
+
+    function test_stakeRevertZeroAmount() public {
+        vm.prank(alice);
+        vm.expectRevert("Cannot claim zero amount");
+        claiming.stake(0, 3);
+    }
+
+    function test_stakeRevertStakingContractZeroAddress() public {
+        vm.prank(alice);
+        vm.expectRevert("Invalid staking address");
+        claiming.stake(1 ether, 3);
+    }
+
+    function test_stakeRevertNotFromClaiming() public {
+        claiming.setStakingContract(address(staking));
+        vm.prank(alice);
+        vm.expectRevert("Only claiming contract can call this function");
+        claiming.stake(1 ether, 3);
+    }
+}
+
+contract StakeFromClaimingTest is BaseTest {
+    function setUp() public override {
+        super.setUp();
+
+        staking.setClaimingContract(address(claiming));
+        claiming.setStakingContract(address(staking));
+        claiming.setClaimStart(block.timestamp + 5 days);
+
+        deal(address(stakeToken), address(this), 200 ether);
+        stakeToken.approve(address(claiming), 200 ether);
+        claiming.deposit(200 ether);
+        claiming.setClaim(alice, 5 ether);
+        claiming.setClaim(bob, 2 ether);
+
+        vm.warp(block.timestamp + 6 days);
+    }
+
+    function test_stakeRevertInsufficientClaimableAmount() public {
+        vm.prank(alice);
+        vm.expectRevert("Insufficient claimable amount");
+        claiming.stake(5.1 ether, 3);
+    }
+
+    function test_stakeRevertInvalidDurationInMonth(uint256 _durationInMonths) public {
+        vm.assume(
+            _durationInMonths != 3 &&
+            _durationInMonths != 6 &&
+            _durationInMonths != 9 &&
+            _durationInMonths != 12
+        );
+
+        vm.prank(alice);
+        vm.expectRevert("Invalid duration for staking.");
+        claiming.stake(1 ether, _durationInMonths);
+    }
+
+    function test_stakeFromClaiming(uint8 _durationInMonths) public {
+        vm.assume(
+            _durationInMonths == 3 ||
+            _durationInMonths == 6 ||
+            _durationInMonths == 9 ||
+            _durationInMonths == 12
+        );
+        
+        vm.prank(alice);
+        claiming.stake(2 ether, _durationInMonths);
+
+        assertEq(stakeToken.balanceOf(address(staking)), 2 ether);
+        assertEq(stakeToken.balanceOf(address(claiming)), 198 ether);
+        assertEq(claiming.getClaimableAmount(alice), 3 ether);
+
+        (,,,uint256 rewards) = staking.getStakingInfo(alice, staking.numStakes(alice) - 1);
+        assertEq(rewards, _calculateRewards(2 ether, _durationInMonths));
+
+        assertEq(staking.totalSupply(), 2 ether);
+    }
+
+    /***************************************
+                    helper
+    ***************************************/
+    function _calculateRewards(uint256 _principal, uint256 _durationInMonths) private view returns (uint256) {
+        if (_durationInMonths <= 3) {
+            return _principal * REWARD_RATE_1Q / DENOMINATOR;
+        } else if (_durationInMonths <= 6) {
+            return _principal * REWARD_RATE_2Q / DENOMINATOR;
+        } else if (_durationInMonths <= 9) {
+            return _principal * REWARD_RATE_3Q / DENOMINATOR;
+        } else {
+            return _principal * REWARD_RATE_4Q / DENOMINATOR;
+        }
     }
 }
 
