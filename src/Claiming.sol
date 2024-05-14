@@ -1,10 +1,11 @@
+// SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-import "./Staking.sol";
+import "./interfaces/IStaking.sol";
 
 contract Claiming is Ownable {
     using SafeERC20 for IERC20;
@@ -13,7 +14,7 @@ contract Claiming is Ownable {
     IERC20 public token;
     // staking contract
     address public staking;
-    // claiming start date
+    // claiming start time
     uint256 public claimStart;
 
     // maximum array length for set batch claim info
@@ -265,7 +266,7 @@ contract Claiming is Ownable {
         claimInfo.amount -= amount;
         token.approve(staking, amount);
 
-        Staking(staking).stakeFromClaiming(msg.sender, amount, durationInMonths);
+        IStaking(staking).stakeFromClaiming(msg.sender, amount, durationInMonths);
 
         emit Staked(msg.sender, amount, block.timestamp);
     }
