@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./interfaces/IUniswapV2Factory.sol";
 import "./interfaces/IUniswapV2Router02.sol";
+import "./interfaces/IUniswapV2Pair.sol";
 import "./interfaces/IClaiming.sol";
 
 contract LiquidityMining is Ownable, ReentrancyGuard {
@@ -15,10 +16,13 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     struct UserDeposit {
         address user;
         uint256 amount;
+        uint256 depositOn;
     }
 
     // address of sale token
     IERC20 public token;
+    // address of reward token
+    IERC20 public rewardToken;
     // address of claiming contract
     address public claiming;
 
@@ -34,8 +38,8 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     mapping(address => uint256) private userDepositIndex;
 
     // UniswapV2 factory
-    IUniswapV2Factory public UNI_FACTORY;
-    IUniswapV2Router02 public UNI_ROUTER;
+    IUniswapV2Factory public uniswapV2Factory;
+    IUniswapV2Router02 public uniswapV2Router;
 
     /* ========== EVENTS ========== */
     // Event emitted when a presale buyer deposits ETH
@@ -46,6 +50,10 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     event SaleTokenDeposited(address indexed user, uint256 amount, uint256 time);
     // Event emitted when a owner withdraws token
     event SaleTokenWithdrawed(address indexed user, uint256 amount, uint256 time);
+    // Event emitted when liquidity is added and LP token is minted
+    event LiquidityAdded(address indexed user, uint256 liqudity, uint256 time);
+    // Event emitted when allowed minimum deposit amount is updated
+    event AllowedMinimumDepositUpdated(address indexed user, uint256 previousAmount, uint256 amount, uint256 time);
 
     modifier onlyPresaleBuyer() {
         require(claiming != address(0), "The address of claiming contract cannot be zero");
@@ -53,18 +61,23 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         _;
     }
 
-    constructor(address _token) Ownable(msg.sender) {
+    constructor(address _token, address _rewardToken) Ownable(msg.sender) {
         // verify input argument
         require(_token != address(0), "Sale token address cannot be zero");
+        require(_rewardToken != address(0), "Reward token address cannot be zero");
+
+        token = IERC20(_token);
+        rewardToken = IERC20(_rewardToken);
 
         // set uniswap factory and router02
-        UNI_FACTORY = IUniswapV2Factory(0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f);
-        UNI_ROUTER = IUniswapV2Router02(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
+        uniswapV2Factory = IUniswapV2Factory(0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f);
+        uniswapV2Router = IUniswapV2Router02(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
 
         // push empty element to the UserDeposit array for convenience
         userDeposits.push(UserDeposit({
             user: address(0),
-            amount: 0
+            amount: 0,
+            depositOn: 0
         }));
     }
 
@@ -85,6 +98,18 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     }
 
     /**
+     * @notice Set the reward token address
+     * 
+     * @param _rewardToken The address of reward token 
+     */
+    function setRewardToken(address _rewardToken) external onlyOwner {
+        // verify input argument
+        require(_rewardToken != address(0), "Token address cannot be zero.");
+
+        rewardToken = IERC20(_rewardToken);
+    }
+
+    /**
      * @notice Set the time to start claiming
      *
      * @param _depositStart The time to start claiming
@@ -96,6 +121,34 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         depositStart = _depositStart;
 
         emit DepositStartTimeUpdated(msg.sender, _depositStart);
+    }
+
+    /**
+     * @notice Set the address of claiming contract
+     * 
+     * @dev Only owner can call this function; should check non-zero address
+     * 
+     * @param _claiming address of the claiming contract
+     */
+    function setClaimingContract(address _claiming) external onlyOwner {
+        // verify input argument
+        require(_claiming != address(0), "Reward token address cannot be zero address");
+
+        claiming = _claiming;
+    }
+
+    /**
+     * @notice Set the minimum allowed to deposit ETH
+     *
+     * @dev amount can be zero value
+     *
+     * @param amount allowed minimum amount to deposit ETH
+     */
+    function setAllowedMinimumDeposit(uint256 amount) external onlyOwner {
+        uint256 previousAmount = ALLOWED_MINIMUM_DEPOSIT;
+        ALLOWED_MINIMUM_DEPOSIT = amount;
+
+        emit AllowedMinimumDepositUpdated(msg.sender, previousAmount, amount, block.timestamp);
     }
 
     /******************************************************
@@ -113,7 +166,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         uint256 previousAmount;
 
         uint256 index = userDepositIndex[msg.sender];
-        if (index > 0) {
+        if (index != 0) {
             // update previous deposit data
             UserDeposit storage userDeposit = userDeposits[index];
             previousAmount = userDeposit.amount;
@@ -125,7 +178,8 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
             // push new user's deposit info
             userDeposits.push(UserDeposit({
                 user: msg.sender,
-                amount: msg.value
+                amount: msg.value,
+                depositOn: block.timestamp
             }));
         }
 
@@ -158,7 +212,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
      *
      * @param amount the amount to be withdrawn
      */
-    function withdraw(uint256 amount) external onlyOwner {
+    function withdrawToken(uint256 amount) external onlyOwner {
         // verify input argument
         require(amount > 0, "Cannot withdraw zero amount");
 
@@ -167,22 +221,77 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         emit SaleTokenWithdrawed(owner(), amount, block.timestamp);
     }
 
+    /**
+     * @notice Add liqudity of ETH/Token to UniV2
+     *
+     * @param amount the amount of sale token to be provided
+     */
+    function addLiquidity(uint256 amount) external onlyOwner {
+        // verify sufficient balance of sale token to add liqudity
+        require(amount <= getTokenBalance(), "Insufficient sale token to mint LP");
+        // verify sufficient ETH balance to add liquidity
+        require(totalDeposits != 0, "Insufficient ETH balance to mint LP");
+
+        // Approve router to mint LP
+        token.approve(address(uniswapV2Router), amount);
+
+        try uniswapV2Router.addLiquidityETH{value: totalDeposits} ( // Amount of AVAX to send for LP on main dex
+            address(token),
+            amount,
+            100, // Infinite slippage basically since it's in wei
+            100, // Infinite slippage basically since it's in wei
+            address(this), // Transfer LP token to this contract
+            block.timestamp
+        )  returns (uint256 , uint256 , uint256 liquidity) {
+            totalDeposits = 0;
+
+            emit LiquidityAdded(msg.sender, liquidity, block.timestamp);
+        } catch {
+            revert(string("Adding liqudity was failed"));
+        }
+    }
+
     /*****************************************************
-                            Setter
+                            Getter
     *****************************************************/
 
     /**
-     * @notice Set the address of claiming contract
-     * 
-     * @dev Only owner can call this function; should check non-zero address
-     * 
-     * @param _claiming address of the claiming contract
+     * @notice Get the total amount of sale token of this contract
      */
-    function setClaimingContract(address _claiming) external onlyOwner {
-        // verify input argument
-        require(_claiming != address(0), "Reward token address cannot be zero address");
+    function getTokenBalance() public view returns(uint256) {
+        return token.balanceOf(address(this));
+    }
 
-        claiming = _claiming;
+    /**
+     * @notice Get the reward token amount for deposited ETH
+     *
+     * @param user address of user to get the reward
+     *
+     * TODO should consider mining is performed
+     */
+    function getRewardTokenAmount(address user) public view returns(uint256) {
+        uint256 index = userDepositIndex[user];
+
+        // If user never deposit ETH, return 0
+        if (index == 0) return 0;
+
+        address pair = getPair();
+        // If pair pool wasn't created, return 0
+        if (pair == 0) return 0;
+
+        uint256 liquidity = IUniswapV2Pair(pair).balanceOf(address(this));
+        // If liquidity is 0, return 0
+        if (liquidity == 0) return 0;
+        
+        UserDeposit storage userDeposit = userDeposits[index];
+        return 0;
+    }
+
+    /**
+     * @notice Get the address of pair pool of sale token and WETH
+     */
+    function getPair() public view returns(address pair) {
+        pair = uniswapV2Factory.getPair(token, uniswapV2Router.WETH());
     }
 }
 
