@@ -26,6 +26,8 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     // address of claiming contract
     address public claiming;
 
+    // status for liquidity is added
+    bool listed;
     // deposit start time
     uint256 public depositStart;
     // minimum ETH amount to deposit
@@ -55,9 +57,8 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     // Event emitted when allowed minimum deposit amount is updated
     event AllowedMinimumDepositUpdated(address indexed user, uint256 previousAmount, uint256 amount, uint256 time);
 
-    modifier onlyPresaleBuyer() {
-        require(claiming != address(0), "The address of claiming contract cannot be zero");
-        require(IClaiming(claiming).getClaimInfoIndex(msg.sender) > 0, "Caller should be presale buyer");
+    modifier onlyWhenNotListed() {
+        require(!listed, "The liquidity pool is already created");
         _;
     }
 
@@ -155,7 +156,11 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
                            External
     ******************************************************/
 
-    function depositETH() external payable onlyPresaleBuyer nonReentrant {
+    function depositETH() external payable onlyWhenNotListed nonReentrant {
+        // only presale buyer can deposit ETH
+        require(claiming != address(0), "The address of claiming contract cannot be zero");
+        require(IClaiming(claiming).getClaimInfoIndex(msg.sender) > 0, "Caller should be presale buyer");
+
         // verify if deposit is allowed
         require(depositStart != 0 && block.timestamp >= depositStart, "Deposit is not allowed for now");
 
@@ -226,13 +231,16 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
      *
      * @param amount the amount of sale token to be provided
      */
-    function addLiquidity(uint256 amount) external onlyOwner {
+    function addLiquidity(uint256 amount) external onlyOwner onlyWhenNotListed {
         // verify sufficient balance of sale token to add liqudity
         require(amount <= getTokenBalance(), "Insufficient sale token to mint LP");
         // verify sufficient ETH balance to add liquidity
         require(totalDeposits != 0, "Insufficient ETH balance to mint LP");
 
-        // Approve router to mint LP
+        // update status for listing as true
+        listed = true;
+
+        // approve router to mint LP
         token.approve(address(uniswapV2Router), amount);
 
         try uniswapV2Router.addLiquidityETH{value: totalDeposits} ( // Amount of AVAX to send for LP on main dex
@@ -277,7 +285,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
 
         address pair = getPair();
         // If pair pool wasn't created, return 0
-        if (pair == 0) return 0;
+        if (pair == address(0)) return 0;
 
         uint256 liquidity = IUniswapV2Pair(pair).balanceOf(address(this));
         // If liquidity is 0, return 0
@@ -291,7 +299,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
      * @notice Get the address of pair pool of sale token and WETH
      */
     function getPair() public view returns(address pair) {
-        pair = uniswapV2Factory.getPair(token, uniswapV2Router.WETH());
+        pair = uniswapV2Factory.getPair(address(token), uniswapV2Router.WETH());
     }
 }
 
