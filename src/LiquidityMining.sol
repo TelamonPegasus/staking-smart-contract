@@ -14,9 +14,9 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     struct UserDeposit {
-        address user;
         uint256 amount;
         uint256 depositOn;
+        bool removed;
     }
 
     // address of sale token
@@ -26,41 +26,42 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     // address of claiming contract
     address public claiming;
 
-    // status for liquidity is added
-    bool listed;
-    // deposit start time
+    // deposit start time, i.e the time presale is over
     uint256 public depositStart;
+    
+    uint256 public REWARD_RATE_1M = 10_000;
+    uint256 public REWARD_RATE_2M = 5_000;
+    uint256 public REWARD_RATE_3M = 2_500;
+    uint256 public REWARD_RATE_4M = 1_500;
+    uint256 public REWARD_RATE_5M = 1_000;
+    uint256 public DENOMINATOR = 10_000;
     // minimum ETH amount to deposit
     uint256 public ALLOWED_MINIMUM_DEPOSIT;
+    // minimum period to lock ETH;
+    uint256 public MININUM_PERIOD_LOCK_ETH;
+    // WETH token address
+    address public WETH;
     // total deposit ETH
     uint256 private totalDeposits;
     // user's deposit ETH
-    UserDeposit[] private userDeposits;
-    // user's index in UserDeposit array
-    mapping(address => uint256) private userDepositIndex;
+    mapping(address => UserDeposit[]) public userDeposits;
+    // total deposited amount of each user
+    mapping(address => uint256) private userTotalDeposits;
 
-    // UniswapV2 factory
     IUniswapV2Factory public uniswapV2Factory;
     IUniswapV2Router02 public uniswapV2Router;
 
     /* ========== EVENTS ========== */
     // Event emitted when a presale buyer deposits ETH
-    event Deposited(address indexed user, uint256 previousAmount, uint256 amount, uint256 time);
+    event Deposited(address indexed user, uint256 amount, uint256 time);
     // Event emitted when an owner updates the time to start deposit
     event DepositStartTimeUpdated(address indexed user, uint256 depositStartTime);
-    // Event emitted when an owner deposits sale token
-    event SaleTokenDeposited(address indexed user, uint256 amount, uint256 time);
-    // Event emitted when a owner withdraws token
-    event SaleTokenWithdrawed(address indexed user, uint256 amount, uint256 time);
-    // Event emitted when liquidity is added and LP token is minted
-    event LiquidityAdded(address indexed user, uint256 liqudity, uint256 time);
     // Event emitted when allowed minimum deposit amount is updated
     event AllowedMinimumDepositUpdated(address indexed user, uint256 previousAmount, uint256 amount, uint256 time);
-
-    modifier onlyWhenNotListed() {
-        require(!listed, "The liquidity pool is already created");
-        _;
-    }
+    // EVent emitted when liquidity removed by the depositor
+    event liquidityRemoved(address indexed user, uint256 ownLiquidity, uint256 amountToken, uint256 amountETH, uint256 time);
+    // EVent emitted when reward token is transferred
+    event RewardTransferred(address indexed user, uint256 amount, uint256 time);
 
     constructor(address _token, address _rewardToken) Ownable(msg.sender) {
         // verify input argument
@@ -73,13 +74,11 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         // set uniswap factory and router02
         uniswapV2Factory = IUniswapV2Factory(0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f);
         uniswapV2Router = IUniswapV2Router02(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
+        
+        // set the WETH token address
+        WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
 
-        // push empty element to the UserDeposit array for convenience
-        userDeposits.push(UserDeposit({
-            user: address(0),
-            amount: 0,
-            depositOn: 0
-        }));
+        MININUM_PERIOD_LOCK_ETH = 30 days;
     }
 
     /******************************************************
@@ -156,7 +155,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
                            External
     ******************************************************/
 
-    function depositETH() external payable onlyWhenNotListed nonReentrant {
+    function depositETH() external payable nonReentrant {
         // only presale buyer can deposit ETH
         require(claiming != address(0), "The address of claiming contract cannot be zero");
         require(IClaiming(claiming).getClaimInfoIndex(msg.sender) > 0, "Caller should be presale buyer");
@@ -168,138 +167,101 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
             require(msg.value >= ALLOWED_MINIMUM_DEPOSIT, "Insufficient deposit amount for minimum allowed");
         }
 
-        uint256 previousAmount;
+        userDeposits[msg.sender].push(UserDeposit({
+            amount: msg.value,
+            depositOn: block.timestamp,
+            removed: false
+        }));
 
-        uint256 index = userDepositIndex[msg.sender];
-        if (index != 0) {
-            // update previous deposit data
-            UserDeposit storage userDeposit = userDeposits[index];
-            previousAmount = userDeposit.amount;
-            // increase deposit amount
-            userDeposit.amount += msg.value;
-        } else {
-            // save index of newly pushed deposit info
-            userDepositIndex[msg.sender] = userDeposits.length;
-            // push new user's deposit info
-            userDeposits.push(UserDeposit({
-                user: msg.sender,
-                amount: msg.value,
-                depositOn: block.timestamp
-            }));
-        }
+        userTotalDeposits[msg.sender] += msg.value;
 
         // increase total deposit amount
         totalDeposits += msg.value;
 
-        emit Deposited(msg.sender, previousAmount, previousAmount + msg.value, block.timestamp);
+        emit Deposited(msg.sender, msg.value, block.timestamp);
     }
 
-    /**
-     * @notice Deposit sale token that will be used to add liquidity
-     *
-     * @dev only owner can call this function
-     *
-     * @param amount the amount to be deposited
-     */
-    function depositToken(uint256 amount) external onlyOwner {
+    function removeLiquidity(uint256 index) external nonReentrant {
         // verify input argument
-        require(amount > 0, "Cannot deposit zero amount");
+        require(index < userDeposits[msg.sender].length, "Invalid index value");
+        
+        UserDeposit storage userDeposit = userDeposits[msg.sender][index];
+        require(!userDeposit.removed, "This liquidity was already removed");
+        
+        // update the removed flag as true
+        userDeposit.removed = true;
+        uint256 liquidity = getLPBalance();
 
-        token.safeTransferFrom(msg.sender, address(this), amount);
-
-        emit SaleTokenDeposited(msg.sender, amount, block.timestamp);
-    }
-
-    /**
-     * @notice Withdraw deposited sale token back
-     *
-     * @dev only owner can call this function
-     *
-     * @param amount the amount to be withdrawn
-     */
-    function withdrawToken(uint256 amount) external onlyOwner {
-        // verify input argument
-        require(amount > 0, "Cannot withdraw zero amount");
-
-        token.safeTransfer(owner(), amount);
-
-        emit SaleTokenWithdrawed(owner(), amount, block.timestamp);
-    }
-
-    /**
-     * @notice Add liqudity of ETH/Token to UniV2
-     *
-     * @param amount the amount of sale token to be provided
-     */
-    function addLiquidity(uint256 amount) external onlyOwner onlyWhenNotListed {
-        // verify sufficient balance of sale token to add liqudity
-        require(amount <= getTokenBalance(), "Insufficient sale token to mint LP");
-        // verify sufficient ETH balance to add liquidity
-        require(totalDeposits != 0, "Insufficient ETH balance to mint LP");
-
-        // update status for listing as true
-        listed = true;
-
-        // approve router to mint LP
-        token.approve(address(uniswapV2Router), amount);
-
-        try uniswapV2Router.addLiquidityETH{value: totalDeposits} ( // Amount of AVAX to send for LP on main dex
+        // valid if liquidity exists
+        require(liquidity != 0, "There is no liquidity in the contract");
+        
+        uint256 ownLiquidity = liquidity * userDeposit.amount / totalDeposits;
+        
+        (uint256 amountToken, uint256 amountETH) = uniswapV2Router.removeLiquidityETH(
             address(token),
-            amount,
-            100, // Infinite slippage basically since it's in wei
-            100, // Infinite slippage basically since it's in wei
-            address(this), // Transfer LP token to this contract
+            ownLiquidity,
+            100,
+            100,
+            msg.sender,
             block.timestamp
-        )  returns (uint256 , uint256 , uint256 liquidity) {
-            totalDeposits = 0;
+        );
 
-            emit LiquidityAdded(msg.sender, liquidity, block.timestamp);
-        } catch {
-            revert(string("Adding liqudity was failed"));
-        }
+        emit liquidityRemoved(msg.sender, ownLiquidity, amountToken, amountETH, block.timestamp);
+
+        // transfer reward token
+        uint256 rewardAmount = getRewardTokenAmount(msg.sender, index);
+        rewardToken.safeTransfer(msg.sender, rewardAmount);
+
+        emit RewardTransferred(msg.sender, rewardAmount, block.timestamp);
     }
 
     /*****************************************************
                             Getter
     *****************************************************/
 
-    /**
-     * @notice Get the total amount of sale token of this contract
-     */
-    function getTokenBalance() public view returns(uint256) {
-        return token.balanceOf(address(this));
-    }
-
-    /**
-     * @notice Get the reward token amount for deposited ETH
-     *
-     * @param user address of user to get the reward
-     *
-     * TODO should consider mining is performed
-     */
-    function getRewardTokenAmount(address user) public view returns(uint256) {
-        uint256 index = userDepositIndex[user];
-
-        // If user never deposit ETH, return 0
-        if (index == 0) return 0;
-
+    function getLPBalance() public view returns (uint256 liquidity) {
         address pair = getPair();
         // If pair pool wasn't created, return 0
         if (pair == address(0)) return 0;
 
-        uint256 liquidity = IUniswapV2Pair(pair).balanceOf(address(this));
-        // If liquidity is 0, return 0
-        if (liquidity == 0) return 0;
+        liquidity = IUniswapV2Pair(pair).balanceOf(address(this));
+    }
+    /**
+     * @notice Get the reward token amount for deposited ETH
+     *
+     * @param user address of user to get the reward
+     * @param index index of the deposit array to get reward
+     *
+     * TODO should consider mining is performed
+     */
+    function getRewardTokenAmount(address user, uint256 index) public view returns(uint256 rewardAmount) {
+        // verify input argument
+        require(user != address(0), "Invalid user address");
+        require(index < userDeposits[msg.sender].length, "Invalid index value");
         
-        UserDeposit storage userDeposit = userDeposits[index];
-        return 0;
+        UserDeposit storage userDeposit = userDeposits[user][index];
+
+        uint256 depositAmount = userDeposit.amount;
+
+        uint256 period = block.timestamp - userDeposit.depositOn;
+        if (period <= 30 days) {
+            rewardAmount = depositAmount * REWARD_RATE_1M / DENOMINATOR;
+        } else if (period <= 60 days) {
+            rewardAmount = depositAmount * REWARD_RATE_2M / DENOMINATOR;
+        } else if (period <= 90 days) {
+            rewardAmount = depositAmount * REWARD_RATE_3M / DENOMINATOR;
+        } else if (period <= 120 days) {
+            rewardAmount = depositAmount * REWARD_RATE_4M / DENOMINATOR;
+        } else {
+            rewardAmount = depositAmount * REWARD_RATE_5M / DENOMINATOR;
+        }
     }
 
     /**
      * @notice Get the address of pair pool of sale token and WETH
      */
     function getPair() public view returns(address pair) {
-        pair = uniswapV2Factory.getPair(address(token), uniswapV2Router.WETH());
+        pair = uniswapV2Factory.getPair(address(token), WETH);
     }
 }
 
