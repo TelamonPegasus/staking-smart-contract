@@ -7,6 +7,6 @@ contract BaseTest is Test {
     uint256 public mainnetFork;
 
     function setUp() public {
-        mainnetFork = vm.createSelectFork("avalanche");
+        mainnetFork = vm.createSelectFork("mainnet");
     }
 }
