@@ -48,6 +48,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     // total deposited amount of each user
     mapping(address => uint256) private userTotalDeposits;
 
+    IUniswapV2Pair public pair;
     IUniswapV2Factory public uniswapV2Factory;
     IUniswapV2Router02 public uniswapV2Router;
 
@@ -58,9 +59,11 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     event DepositStartTimeUpdated(address indexed user, uint256 depositStartTime);
     // Event emitted when allowed minimum deposit amount is updated
     event AllowedMinimumDepositUpdated(address indexed user, uint256 previousAmount, uint256 amount, uint256 time);
-    // EVent emitted when liquidity removed by the depositor
-    event liquidityRemoved(address indexed user, uint256 ownLiquidity, uint256 amountToken, uint256 amountETH, uint256 time);
-    // EVent emitted when reward token is transferred
+    // Event emitted when liquidity added by the owner
+    event LiquidityAdded(address indexed user, uint256 liquidity, uint256 time);
+    // Event emitted when liquidity removed by the depositor
+    event LiquidityRemoved(address indexed user, uint256 ownLiquidity, uint256 amountToken, uint256 amountETH, uint256 time);
+    // Event emitted when reward token is transferred
     event RewardTransferred(address indexed user, uint256 amount, uint256 time);
 
     constructor(address _token, address _rewardToken) Ownable(msg.sender) {
@@ -95,6 +98,18 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         require(_token != address(0), "Token address cannot be zero.");
 
         token = IERC20(_token);
+    }
+
+    /**
+     * @notice Set the WETH token address
+     * 
+     * @param _WETH The address of WETH token 
+     */
+    function setWETH(address _WETH) external onlyOwner {
+        // verify input argument
+        require(_WETH != address(0), "Token address cannot be zero.");
+
+        WETH = _WETH;
     }
 
     /**
@@ -151,6 +166,18 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         emit AllowedMinimumDepositUpdated(msg.sender, previousAmount, amount, block.timestamp);
     }
 
+    /**
+     * @notice Set the uniswap v2 pair contract
+     *
+     * @param _pair the address of the pair pool
+     */
+    function setPair(address _pair) external onlyOwner {
+        // verify input argument
+        require(_pair != address(0), "Pair address cannot be zero");
+
+        pair = IUniswapV2Pair(_pair);
+    }
+
     /******************************************************
                            External
     ******************************************************/
@@ -181,6 +208,48 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         emit Deposited(msg.sender, msg.value, block.timestamp);
     }
 
+    /**
+     * @notice Add liqudity of ETH/Token to UniV2
+     *
+     * @param _pair the address of pair pool on Uni v2
+     */
+    function addLiquidity(address _pair) external onlyOwner {
+        require(address(token) != address(0), "Sale token address cannot be zero");
+        // verify passed pair address with sale token and WETH 
+        require(uniswapV2Factory.getPair(address(token), WETH) == _pair, "The pair address is invalid");
+        // verify sufficient ETH balance to add liquidity
+        require(totalDeposits != 0, "Insufficient ETH balance to mint LP");
+
+        pair = IUniswapV2Pair(_pair);
+
+        (uint256 reserve0, uint256 reserve1, ) = pair.getReserves();
+        uint256 quote;
+        if (address(token) < WETH) {
+            quote = uniswapV2Router.quote(totalDeposits, reserve1, reserve0);
+        } else {
+            quote = uniswapV2Router.quote(totalDeposits, reserve0, reserve1);
+        }
+        uint256 amount = quote * 2;
+
+        // Approve router to mint LP
+        token.approve(address(uniswapV2Router), amount);
+
+        try uniswapV2Router.addLiquidityETH{value: totalDeposits} ( // Amount of ETH to send for LP on univ2
+            address(token),
+            amount,
+            100, // Infinite slippage basically since it's in wei
+            totalDeposits, // should add liquidity this amount exactly
+            address(this), // Transfer LP token to this contract
+            block.timestamp
+        ) returns (uint256 , uint256 , uint256 liquidity) {
+            totalDeposits = 0;
+
+            emit LiquidityAdded(msg.sender, liquidity, block.timestamp);
+        } catch {
+            revert(string("Adding liqudity was failed"));
+        }
+    }
+
     function removeLiquidity(uint256 index) external nonReentrant {
         // verify input argument
         require(index < userDeposits[msg.sender].length, "Invalid index value");
@@ -206,7 +275,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
             block.timestamp
         );
 
-        emit liquidityRemoved(msg.sender, ownLiquidity, amountToken, amountETH, block.timestamp);
+        emit LiquidityRemoved(msg.sender, ownLiquidity, amountToken, amountETH, block.timestamp);
 
         // transfer reward token
         uint256 rewardAmount = getRewardTokenAmount(msg.sender, index);
@@ -220,12 +289,11 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     *****************************************************/
 
     function getLPBalance() public view returns (uint256 liquidity) {
-        address pair = getPair();
-        // If pair pool wasn't created, return 0
-        if (pair == address(0)) return 0;
+        if (address(pair) == address(0)) return 0;
 
-        liquidity = IUniswapV2Pair(pair).balanceOf(address(this));
+        liquidity = pair.balanceOf(address(this));
     }
+
     /**
      * @notice Get the reward token amount for deposited ETH
      *
@@ -255,13 +323,6 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         } else {
             rewardAmount = depositAmount * REWARD_RATE_5M / DENOMINATOR;
         }
-    }
-
-    /**
-     * @notice Get the address of pair pool of sale token and WETH
-     */
-    function getPair() public view returns(address pair) {
-        pair = uniswapV2Factory.getPair(address(token), WETH);
     }
 }
 
