@@ -14,6 +14,8 @@ contract Claiming is Ownable {
     IERC20 public token;
     // staking contract
     address public staking;
+    // liquidity mining contract
+    address public liquidityMining;
     // claiming start time
     uint256 public claimStart;
 
@@ -50,6 +52,19 @@ contract Claiming is Ownable {
         require(claimStart != 0 && block.timestamp > claimStart, "Claiming is not able now.");
         
         // execute the rest of the function
+        _;
+    }
+
+    modifier onlyOwnerOrLiquidityMiningContract() {
+        if(
+            (
+                liquidityMining == address(0) ||
+                liquidityMining != _msgSender()
+            ) &&
+            (owner() != _msgSender())
+        ) {
+            revert("Invalid permission to call this function");
+        }
         _;
     }
 
@@ -95,6 +110,18 @@ contract Claiming is Ownable {
     }
 
     /**
+     * @notice Set the address of liquidity mining contract
+     *
+     * @param _liquidityMining The address of the staking contract
+     */
+    function setLiquidityMiningContract(address _liquidityMining) external onlyOwner {
+        // verify input argument
+        require(address(_liquidityMining) != address(0), "Liquidity mining contract cannot be zero address.");
+
+        liquidityMining = _liquidityMining;
+    }
+
+    /**
      * @notice Set the time to start claiming
      *
      * @param _claimStart The time to start claiming
@@ -116,7 +143,7 @@ contract Claiming is Ownable {
      * @param user address of the user
      * @param amount amount of the claim
      */
-    function setClaim(address user, uint256 amount) external onlyOwner {
+    function setClaim(address user, uint256 amount) external onlyOwnerOrLiquidityMiningContract {
         // verify input argument
         require(user != address(0), "User address cannot be zero.");
 
@@ -269,6 +296,22 @@ contract Claiming is Ownable {
         IStaking(staking).stakeFromClaiming(msg.sender, amount, durationInMonths);
 
         emit Staked(msg.sender, amount, block.timestamp);
+    }
+
+    /**
+     * @notice transfer sale tokens to liquidity mining contract for adding liquidity
+     *
+     * @dev callable only from liquidity minig contract itself
+     *
+     * @param amount token amount to be transferred
+     */
+    function transferTokenToLiquidityMining(uint256 amount) external {
+        // verify input argument
+        require(amount != 0, "Cannot transfer zero amount");
+        // verify liquidity mining contract
+        require(liquidityMining != address(0) && liquidityMining == msg.sender, "Only liquidity mining contract can call this function");
+
+        token.safeTransfer(liquidityMining, amount);
     }
 
     /*****************************************************
