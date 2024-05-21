@@ -60,11 +60,9 @@ contract Staking is Ownable {
      * @dev Set the staking & reward token contract and owner of this smart contract.
      * 
      * @param _token token address to be staked
-     * @param _rewardToken token address to be rewarded
      */
-    constructor(address _token, address _rewardToken) Ownable(msg.sender) {
+    constructor(address _token) Ownable(msg.sender) {
         token = IERC20(_token);
-        rewardToken = IERC20(_rewardToken);
     }
 
     /**
@@ -240,7 +238,7 @@ contract Staking is Ownable {
         uint256 rewards = userStake.rewards;
         userStake.rewards = 0;
 
-        rewardToken.safeTransfer(msg.sender, rewards);
+        token.safeTransfer(msg.sender, rewards); // transfer rewards
 
         // emit an event
         emit Claimed(msg.sender, rewards, block.timestamp);
@@ -255,17 +253,14 @@ contract Staking is Ownable {
      * @return amount of reward token
      */
     function calculateRewards(uint256 _principal, uint256 _durationInMonths) private view returns (uint256) {
-        uint256 stakeDenominator = 10 ** 18; // temporary value
-        uint256 rewardDenominator = 10 ** 18; // temporary value
-
         if (_durationInMonths <= 3) {
-            return _principal * rewardDenominator * REWARD_RATE_1Q / (DENOMINATOR * stakeDenominator);
+            return _principal * REWARD_RATE_1Q / DENOMINATOR;
         } else if (_durationInMonths <= 6) {
-            return _principal * rewardDenominator * REWARD_RATE_2Q / (DENOMINATOR * stakeDenominator);
+            return _principal * REWARD_RATE_2Q / DENOMINATOR;
         } else if (_durationInMonths <= 9) {
-            return _principal * rewardDenominator * REWARD_RATE_3Q / (DENOMINATOR * stakeDenominator);
+            return _principal * REWARD_RATE_3Q / DENOMINATOR;
         } else {
-            return _principal * rewardDenominator * REWARD_RATE_4Q / (DENOMINATOR * stakeDenominator);
+            return _principal * REWARD_RATE_4Q / DENOMINATOR;
         }
     }
 
@@ -350,20 +345,6 @@ contract Staking is Ownable {
         require(_token != address(0), "Stake token address cannot be zero address");
 
         token = IERC20(_token);
-    }
-
-    /**
-     * @notice Set the reward token
-     * 
-     * @dev Only owner can call this function; should check non-zero address
-     * 
-     * @param _rewardToken address of the reward token to be updated
-     */
-    function setRewardToken(address _rewardToken) external onlyOwner {
-        // verify input argument
-        require(_rewardToken != address(0), "Reward token address cannot be zero address");
-
-        rewardToken = IERC20(_rewardToken);
     }
 
     /**
