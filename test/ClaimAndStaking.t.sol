@@ -21,15 +21,13 @@ contract BaseTest is Test {
     uint256 public DENOMINATOR;
 
     MockERC20 public stakeToken;
-    MockERC20 public rewardToken;
 
     using SafeERC20 for MockERC20;
 
     function setUp() public virtual {
         stakeToken = new MockERC20();
-        rewardToken = new MockERC20();
 
-        staking = new Staking(address(stakeToken), address(rewardToken));
+        staking = new Staking(address(stakeToken));
         claiming = new Claiming(address(stakeToken));
 
         REWARD_RATE_1Q = staking.REWARD_RATE_1Q();
@@ -395,8 +393,8 @@ contract StakingEnableTest is BaseTest {
         super.setUp();
 
         staking.setStakingEnabled();
-        deal(address(stakeToken), alice, 100 ether);
-        deal(address(rewardToken), address(staking), 1000 ether);
+        deal(address(stakeToken), alice, 1000 ether);
+        // deal(address(rewardToken), address(staking), 1000 ether);
     }
 
     function test_stake(uint8 _amount, uint8 _durationInMonths) public {
@@ -414,7 +412,7 @@ contract StakingEnableTest is BaseTest {
         staking.stake(amount, _durationInMonths);
         vm.stopPrank();
 
-        assertEq(stakeToken.balanceOf(alice), 100 ether - amount);
+        assertEq(stakeToken.balanceOf(alice), 1000 ether - amount);
 
         (,,,uint256 rewards) = staking.getStakingInfo(alice, staking.numStakes(alice) - 1);
         assertEq(rewards, _calculateRewards(amount, _durationInMonths));
@@ -546,6 +544,7 @@ contract StakingEnableTest is BaseTest {
         assertEq(rewards, _calculateRewards(amount, _durationInMonths));
         assertEq(staking.totalSupply(), amount);
 
+        uint256 balanceBeforeRewards = stakeToken.balanceOf(alice);
         vm.warp(lockEnd);
         vm.prank(alice);
         staking.claimRewards(0);
@@ -553,7 +552,7 @@ contract StakingEnableTest is BaseTest {
         (, , , uint256 leftRewards) = staking.getStakingInfo(alice, 0);
         assertEq(leftRewards, 0);
 
-        assertEq(rewardToken.balanceOf(alice), rewards);
+        assertEq(stakeToken.balanceOf(alice), balanceBeforeRewards + rewards);
     }
 
     function test_claimRewardsRevertInvalidIndex() public {        
@@ -795,17 +794,6 @@ contract StakingEnableTest is BaseTest {
     function test_setStakeTokenRevertZeroAddress() public {
         vm.expectRevert("Stake token address cannot be zero address");
         staking.setToken(address(0));
-    }
-
-    function test_setRewardToken() public {
-        MockERC20 thirdToken = new MockERC20();
-        staking.setRewardToken(address(thirdToken));
-        assertEq(address(staking.rewardToken()), address(thirdToken));
-    }
-
-    function test_setRewardTokenRevertZeroAddress() public {
-        vm.expectRevert("Reward token address cannot be zero address");
-        staking.setRewardToken(address(0));
     }
 
     /***************************************

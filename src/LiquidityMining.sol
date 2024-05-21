@@ -5,6 +5,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "./interfaces/IAggregatorV3Interface.sol";
 import "./interfaces/IUniswapV2Factory.sol";
 import "./interfaces/IUniswapV2Router02.sol";
 import "./interfaces/IUniswapV2Pair.sol";
@@ -25,6 +26,11 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     IERC20 public rewardToken;
     // address of claiming contract
     address public claiming;
+
+    // status for liquidity is added
+    bool listed;
+    // liquidity amount to be listed
+    uint256 liquidity;
 
     // deposit start time, i.e the time presale is over
     uint256 public depositStart;
@@ -51,7 +57,9 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     IUniswapV2Pair public pair;
     IUniswapV2Factory public uniswapV2Factory;
     IUniswapV2Router02 public uniswapV2Router;
-
+    
+    AggregatorV3Interface internal chainlinkETHUSDContract;
+    
     /* ========== EVENTS ========== */
     // Event emitted when a presale buyer deposits ETH
     event Deposited(address indexed user, uint256 amount, uint256 time);
@@ -66,13 +74,20 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     // Event emitted when reward token is transferred
     event RewardTransferred(address indexed user, uint256 amount, uint256 time);
 
-    constructor(address _token, address _rewardToken) Ownable(msg.sender) {
+    modifier onlyWhenNotListed() {
+        require(!listed, "Liquidity is already listed");
+        _;
+    }
+
+    constructor(address _token, address _rewardToken, address _chainlinkETHUSDAddress) Ownable(msg.sender) {
         // verify input argument
         require(_token != address(0), "Sale token address cannot be zero");
         require(_rewardToken != address(0), "Reward token address cannot be zero");
 
         token = IERC20(_token);
         rewardToken = IERC20(_rewardToken);
+
+        chainlinkETHUSDContract = AggregatorV3Interface(_chainlinkETHUSDAddress);
 
         // set uniswap factory and router02
         uniswapV2Factory = IUniswapV2Factory(0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f);
@@ -182,17 +197,21 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
                            External
     ******************************************************/
 
-    function depositETH() external payable nonReentrant {
-        // only presale buyer can deposit ETH
-        require(claiming != address(0), "The address of claiming contract cannot be zero");
-        require(IClaiming(claiming).getClaimInfoIndex(msg.sender) > 0, "Caller should be presale buyer");
-
+    function depositETH() external payable nonReentrant onlyWhenNotListed {
+        require(msg.value > 0, "Cannot deposit 0 ETH");
         // verify if deposit is allowed
         require(depositStart != 0 && block.timestamp >= depositStart, "Deposit is not allowed for now");
 
         if (ALLOWED_MINIMUM_DEPOSIT > 0) {
             require(msg.value >= ALLOWED_MINIMUM_DEPOSIT, "Insufficient deposit amount for minimum allowed");
         }
+
+        (bool depositable, uint256 claimableAmount, uint256 ethValue) = _checkClaimableAmountForDepositETH(msg.sender, msg.value);
+        // only presale buyer can deposit ETH
+        require(depositable, "You don't have sufficient claimable token amount to deposit ETH");
+
+        // decrease the user's claimable token amount by deposited ETH market value
+        IClaiming(claiming).setClaim(msg.sender, claimableAmount - ethValue);
 
         userDeposits[msg.sender].push(UserDeposit({
             amount: msg.value,
@@ -209,11 +228,11 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Add liqudity of ETH/Token to UniV2
+     * @notice Add liquidity of ETH/Token to UniV2
      *
      * @param _pair the address of pair pool on Uni v2
      */
-    function addLiquidity(address _pair) external onlyOwner {
+    function addLiquidity(address _pair) external onlyOwner onlyWhenNotListed {
         require(address(token) != address(0), "Sale token address cannot be zero");
         // verify passed pair address with sale token and WETH 
         require(uniswapV2Factory.getPair(address(token), WETH) == _pair, "The pair address is invalid");
@@ -222,14 +241,18 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
 
         pair = IUniswapV2Pair(_pair);
 
+        listed = true;
+
         (uint256 reserve0, uint256 reserve1, ) = pair.getReserves();
-        uint256 quote;
+        uint256 amount;
         if (address(token) < WETH) {
-            quote = uniswapV2Router.quote(totalDeposits, reserve1, reserve0);
+            amount = uniswapV2Router.quote(totalDeposits, reserve1, reserve0);
         } else {
-            quote = uniswapV2Router.quote(totalDeposits, reserve0, reserve1);
+            amount = uniswapV2Router.quote(totalDeposits, reserve0, reserve1);
         }
-        uint256 amount = quote * 2;
+
+        // get the sale token from the claiming contract for adding liquidity
+        IClaiming(claiming).transferTokenForAddingLiquidity(amount);
 
         // Approve router to mint LP
         token.approve(address(uniswapV2Router), amount);
@@ -241,12 +264,13 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
             totalDeposits, // should add liquidity this amount exactly
             address(this), // Transfer LP token to this contract
             block.timestamp
-        ) returns (uint256 , uint256 , uint256 liquidity) {
+        ) returns (uint256 , uint256 , uint256 liquidityAmount) {
             totalDeposits = 0;
+            liquidity = liquidityAmount;
 
-            emit LiquidityAdded(msg.sender, liquidity, block.timestamp);
+            emit LiquidityAdded(msg.sender, liquidityAmount, block.timestamp);
         } catch {
-            revert(string("Adding liqudity was failed"));
+            revert(string("Adding liquidity was failed"));
         }
     }
 
@@ -259,7 +283,6 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         
         // update the removed flag as true
         userDeposit.removed = true;
-        uint256 liquidity = getLPBalance();
 
         // valid if liquidity exists
         require(liquidity != 0, "There is no liquidity in the contract");
@@ -287,12 +310,6 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     /*****************************************************
                             Getter
     *****************************************************/
-
-    function getLPBalance() public view returns (uint256 liquidity) {
-        if (address(pair) == address(0)) return 0;
-
-        liquidity = pair.balanceOf(address(this));
-    }
 
     /**
      * @notice Get the reward token amount for deposited ETH
@@ -323,6 +340,36 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         } else {
             rewardAmount = depositAmount * REWARD_RATE_5M / DENOMINATOR;
         }
+    }
+
+    function fetchETHUSDPrice() public view returns (uint256 price, uint256 decimals) {
+        (, int256 priceInt, , , ) = chainlinkETHUSDContract.latestRoundData();
+        decimals = chainlinkETHUSDContract.decimals();
+        price = uint256(priceInt);
+        return (price, decimals);
+    }
+
+    function _checkClaimableAmountForDepositETH(
+        address user,
+        uint256 ethAmount
+    ) private view returns (
+        bool depositable,
+        uint256 claimableAmount,
+        uint256 ethValue
+    ) {
+        // verify claiming contract address
+        require(claiming != address(0), "The address of claiming contract cannot be zero");
+        
+        // get the latest ETH price and decimals
+        (uint256 price, uint256 decimals) = fetchETHUSDPrice();
+
+        // calculate deposited ETH market value (didn't divide with 10 ** 18, because the sale token's decimals is also 18)
+        ethValue = ethAmount * price / (10 ** decimals);
+
+        // get current claimable token amount for user
+        claimableAmount = IClaiming(claiming).getClaimableAmount(user);
+        
+        depositable = claimableAmount >= ethValue;
     }
 }
 
