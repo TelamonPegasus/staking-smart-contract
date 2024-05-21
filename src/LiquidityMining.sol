@@ -27,7 +27,10 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     // address of claiming contract
     address public claiming;
 
+    // status for liquidity is added
     bool listed;
+    // liquidity amount to be listed
+    uint256 liquidity;
 
     // deposit start time, i.e the time presale is over
     uint256 public depositStart;
@@ -225,7 +228,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Add liqudity of ETH/Token to UniV2
+     * @notice Add liquidity of ETH/Token to UniV2
      *
      * @param _pair the address of pair pool on Uni v2
      */
@@ -261,12 +264,13 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
             totalDeposits, // should add liquidity this amount exactly
             address(this), // Transfer LP token to this contract
             block.timestamp
-        ) returns (uint256 , uint256 , uint256 liquidity) {
+        ) returns (uint256 , uint256 , uint256 liquidityAmount) {
             totalDeposits = 0;
+            liquidity = liquidityAmount;
 
-            emit LiquidityAdded(msg.sender, liquidity, block.timestamp);
+            emit LiquidityAdded(msg.sender, liquidityAmount, block.timestamp);
         } catch {
-            revert(string("Adding liqudity was failed"));
+            revert(string("Adding liquidity was failed"));
         }
     }
 
@@ -279,7 +283,6 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         
         // update the removed flag as true
         userDeposit.removed = true;
-        uint256 liquidity = getLPBalance();
 
         // valid if liquidity exists
         require(liquidity != 0, "There is no liquidity in the contract");
@@ -307,12 +310,6 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     /*****************************************************
                             Getter
     *****************************************************/
-
-    function getLPBalance() public view returns (uint256 liquidity) {
-        if (address(pair) == address(0)) return 0;
-
-        liquidity = pair.balanceOf(address(this));
-    }
 
     /**
      * @notice Get the reward token amount for deposited ETH
