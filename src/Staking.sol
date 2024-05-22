@@ -16,8 +16,6 @@ contract Staking is Ownable {
 
     // Token being staked
     IERC20 public token;
-    // Token being rewarded
-    IERC20 public rewardToken;
     // Claiming contract address
     address public claiming;
 
@@ -315,9 +313,10 @@ contract Staking is Ownable {
      * 
      * @dev Only owner can call this function; should check non-zero address
      * 
+     * @param staker address of user to get the staking info
      * @param index index of staking to get the detail
      */
-    function getStakingInfo(address staker, uint256 index) public view returns(uint256, uint256, uint256, uint256) {
+    function getStakeInfo(address staker, uint256 index) public view returns(uint256, uint256, uint256, uint256) {
         // verify input argument
         require(index < userStakes[staker].length, "Invalid index for staked records.");
 
@@ -328,6 +327,28 @@ contract Staking is Ownable {
             userStake.lockEnd,
             userStake.rewards
         );
+    }
+
+    /**
+     * @notice Get the info of a particular staking
+     * 
+     * @dev Only owner can call this function; should check non-zero address
+     * 
+     * @param staker address of user to get the staking info
+     */
+    function getStakeInfoArray(address staker) public view returns(UserStake[] memory) {
+        uint256 length = numStakes(staker);
+        UserStake[] memory userStakeArray = new UserStake[](length);
+
+        for (uint256 i = 0; i < length;) {
+            userStakeArray[i] = userStakes[staker][i];
+
+            unchecked {
+                ++i;
+            }
+        }
+
+        return userStakeArray;
     }
 
     /*****************************************************
