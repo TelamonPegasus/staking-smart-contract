@@ -22,8 +22,6 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
 
     // address of sale token
     IERC20 public token;
-    // address of reward token
-    IERC20 public rewardToken;
     // address of claiming contract
     address public claiming;
 
@@ -79,13 +77,11 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         _;
     }
 
-    constructor(address _token, address _rewardToken, address _chainlinkETHUSDAddress) Ownable(msg.sender) {
+    constructor(address _token, address _chainlinkETHUSDAddress) Ownable(msg.sender) {
         // verify input argument
         require(_token != address(0), "Sale token address cannot be zero");
-        require(_rewardToken != address(0), "Reward token address cannot be zero");
 
         token = IERC20(_token);
-        rewardToken = IERC20(_rewardToken);
 
         chainlinkETHUSDContract = AggregatorV3Interface(_chainlinkETHUSDAddress);
 
@@ -125,18 +121,6 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         require(_WETH != address(0), "Token address cannot be zero.");
 
         WETH = _WETH;
-    }
-
-    /**
-     * @notice Set the reward token address
-     * 
-     * @param _rewardToken The address of reward token 
-     */
-    function setRewardToken(address _rewardToken) external onlyOwner {
-        // verify input argument
-        require(_rewardToken != address(0), "Token address cannot be zero.");
-
-        rewardToken = IERC20(_rewardToken);
     }
 
     /**
@@ -320,7 +304,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
 
         // transfer reward token
         uint256 rewardAmount = getRewardTokenAmount(msg.sender, index);
-        rewardToken.safeTransfer(msg.sender, rewardAmount);
+        token.safeTransfer(msg.sender, rewardAmount);
 
         emit RewardTransferred(msg.sender, rewardAmount, block.timestamp);
     }
