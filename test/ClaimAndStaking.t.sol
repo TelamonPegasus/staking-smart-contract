@@ -344,7 +344,7 @@ contract StakeFromClaimingTest is BaseTest {
         assertEq(stakeToken.balanceOf(address(claiming)), 198 ether);
         assertEq(claiming.getClaimableAmount(alice), 3 ether);
 
-        (,,,uint256 rewards) = staking.getStakingInfo(alice, staking.numStakes(alice) - 1);
+        (,,,uint256 rewards) = staking.getStakeInfo(alice, staking.numStakes(alice) - 1);
         assertEq(rewards, _calculateRewards(2 ether, _durationInMonths));
 
         assertEq(staking.totalSupply(), 2 ether);
@@ -414,7 +414,7 @@ contract StakingEnableTest is BaseTest {
 
         assertEq(stakeToken.balanceOf(alice), 1000 ether - amount);
 
-        (,,,uint256 rewards) = staking.getStakingInfo(alice, staking.numStakes(alice) - 1);
+        (,,,uint256 rewards) = staking.getStakeInfo(alice, staking.numStakes(alice) - 1);
         assertEq(rewards, _calculateRewards(amount, _durationInMonths));
 
         assertEq(staking.totalSupply(), amount);
@@ -460,7 +460,7 @@ contract StakingEnableTest is BaseTest {
         staking.stake(amount, _durationInMonths);
         vm.stopPrank();
 
-        (uint256 _currentAmount, uint256 lockOn, uint256 lockEnd, uint256 rewards) = staking.getStakingInfo(alice, 0);
+        (uint256 _currentAmount, uint256 lockOn, uint256 lockEnd, uint256 rewards) = staking.getStakeInfo(alice, 0);
         assertEq(amount, _currentAmount);
         assertEq(lockEnd, lockOn + uint256(_durationInMonths) * 30 days);
         vm.warp(lockEnd);
@@ -468,7 +468,7 @@ contract StakingEnableTest is BaseTest {
         vm.prank(alice);
         staking.withdraw(0);
 
-        (uint256 leftAmount, , , uint256 leftRewards) = staking.getStakingInfo(alice, 0);
+        (uint256 leftAmount, , , uint256 leftRewards) = staking.getStakeInfo(alice, 0);
         assertEq(leftAmount, 0);
         assertEq(rewards, leftRewards);
     }
@@ -499,7 +499,7 @@ contract StakingEnableTest is BaseTest {
         staking.stake(amount, _durationInMonths);
         vm.stopPrank();
 
-        (uint256 _currentAmount, uint256 lockOn, uint256 lockEnd, uint256 rewards) = staking.getStakingInfo(alice, 0);
+        (uint256 _currentAmount, uint256 lockOn, uint256 lockEnd, uint256 rewards) = staking.getStakeInfo(alice, 0);
         assertEq(amount, _currentAmount);
         assertEq(lockEnd, lockOn + uint256(_durationInMonths) * 30 days);
         assertEq(rewards, _calculateRewards(amount, _durationInMonths));
@@ -507,7 +507,7 @@ contract StakingEnableTest is BaseTest {
         vm.prank(alice);
         staking.withdraw(0);
 
-        (, , , uint256 currentRewards) = staking.getStakingInfo(alice, 0);
+        (, , , uint256 currentRewards) = staking.getStakeInfo(alice, 0);
         assertEq(currentRewards, 0);
     }
 
@@ -540,7 +540,7 @@ contract StakingEnableTest is BaseTest {
         staking.stake(amount, _durationInMonths);
         vm.stopPrank();
 
-        (, , uint256 lockEnd, uint256 rewards) = staking.getStakingInfo(alice, 0);
+        (, , uint256 lockEnd, uint256 rewards) = staking.getStakeInfo(alice, 0);
         assertEq(rewards, _calculateRewards(amount, _durationInMonths));
         assertEq(staking.totalSupply(), amount);
 
@@ -549,7 +549,7 @@ contract StakingEnableTest is BaseTest {
         vm.prank(alice);
         staking.claimRewards(0);
 
-        (, , , uint256 leftRewards) = staking.getStakingInfo(alice, 0);
+        (, , , uint256 leftRewards) = staking.getStakeInfo(alice, 0);
         assertEq(leftRewards, 0);
 
         assertEq(stakeToken.balanceOf(alice), balanceBeforeRewards + rewards);
@@ -572,13 +572,13 @@ contract StakingEnableTest is BaseTest {
         staking.stake(1 ether, 12);
         vm.stopPrank();
 
-        (, , uint256 lockEnd,) = staking.getStakingInfo(alice, 0);
+        (, , uint256 lockEnd,) = staking.getStakeInfo(alice, 0);
 
         vm.warp(lockEnd);
         vm.prank(alice);
         staking.claimRewards(0);
 
-        (, , , uint256 leftRewards) = staking.getStakingInfo(alice, 0);
+        (, , , uint256 leftRewards) = staking.getStakeInfo(alice, 0);
         assertEq(leftRewards, 0);
 
         vm.expectRevert("There is no claimable reward token.");
@@ -607,16 +607,16 @@ contract StakingEnableTest is BaseTest {
         uint256 aliceAmount = stakeToken.balanceOf(alice);
         uint256 totalSupply = staking.totalSupply();
 
-        (uint256 amount_1, , , uint256 rewards_1) = staking.getStakingInfo(alice, 0);
-        (uint256 amount_2, , ,) = staking.getStakingInfo(alice, 1);
+        (uint256 amount_1, , , uint256 rewards_1) = staking.getStakeInfo(alice, 0);
+        (uint256 amount_2, , ,) = staking.getStakeInfo(alice, 1);
 
         assertEq(totalSupply, amount_1 + amount_2);
 
         vm.prank(alice);
         staking.withdrawAll(false);
 
-        (uint256 after_amount_1, , , uint256 after_rewards_1) = staking.getStakingInfo(alice, 0);
-        (uint256 after_amount_2, , , uint256 after_rewards_2) = staking.getStakingInfo(alice, 1);
+        (uint256 after_amount_1, , , uint256 after_rewards_1) = staking.getStakeInfo(alice, 0);
+        (uint256 after_amount_2, , , uint256 after_rewards_2) = staking.getStakeInfo(alice, 1);
 
         assertEq(after_amount_1, 0);
         assertEq(after_amount_2, 0);
@@ -637,16 +637,16 @@ contract StakingEnableTest is BaseTest {
         uint256 aliceAmount = stakeToken.balanceOf(alice);
         uint256 totalSupply = staking.totalSupply();
 
-        (uint256 amount_1, , , uint256 rewards_1) = staking.getStakingInfo(alice, 0);
-        (uint256 amount_2, , , uint256 rewards_2) = staking.getStakingInfo(alice, 1);
+        (uint256 amount_1, , , uint256 rewards_1) = staking.getStakeInfo(alice, 0);
+        (uint256 amount_2, , , uint256 rewards_2) = staking.getStakeInfo(alice, 1);
 
         assertEq(totalSupply, amount_1 + amount_2);
 
         vm.prank(alice);
         staking.withdrawAll(true);
 
-        (uint256 after_amount_1, , , uint256 after_rewards_1) = staking.getStakingInfo(alice, 0);
-        (uint256 after_amount_2, , , uint256 after_rewards_2) = staking.getStakingInfo(alice, 1);
+        (uint256 after_amount_1, , , uint256 after_rewards_1) = staking.getStakeInfo(alice, 0);
+        (uint256 after_amount_2, , , uint256 after_rewards_2) = staking.getStakeInfo(alice, 1);
 
         assertEq(after_amount_1, 0);
         assertEq(after_amount_2, amount_2);
@@ -673,16 +673,16 @@ contract StakingEnableTest is BaseTest {
         uint256 aliceAmount = stakeToken.balanceOf(alice);
         uint256 totalSupply = staking.totalSupply();
 
-        (uint256 amount_1, , , uint256 rewards_1) = staking.getStakingInfo(alice, 0);
-        (uint256 amount_2, , ,) = staking.getStakingInfo(alice, 1);
+        (uint256 amount_1, , , uint256 rewards_1) = staking.getStakeInfo(alice, 0);
+        (uint256 amount_2, , ,) = staking.getStakeInfo(alice, 1);
 
         assertEq(totalSupply, amount_1 + amount_2);
 
         vm.prank(alice);
         staking.withdrawBatch(0, 1, false);
 
-        (uint256 after_amount_1, , , uint256 after_rewards_1) = staking.getStakingInfo(alice, 0);
-        (uint256 after_amount_2, , , uint256 after_rewards_2) = staking.getStakingInfo(alice, 1);
+        (uint256 after_amount_1, , , uint256 after_rewards_1) = staking.getStakeInfo(alice, 0);
+        (uint256 after_amount_2, , , uint256 after_rewards_2) = staking.getStakeInfo(alice, 1);
 
         assertEq(after_amount_1, 0);
         assertEq(after_amount_2, 0);
@@ -703,16 +703,16 @@ contract StakingEnableTest is BaseTest {
         uint256 aliceAmount = stakeToken.balanceOf(alice);
         uint256 totalSupply = staking.totalSupply();
 
-        (uint256 amount_1, , , uint256 rewards_1) = staking.getStakingInfo(alice, 0);
-        (uint256 amount_2, , , uint256 rewards_2) = staking.getStakingInfo(alice, 1);
+        (uint256 amount_1, , , uint256 rewards_1) = staking.getStakeInfo(alice, 0);
+        (uint256 amount_2, , , uint256 rewards_2) = staking.getStakeInfo(alice, 1);
 
         assertEq(totalSupply, amount_1 + amount_2);
 
         vm.prank(alice);
         staking.withdrawBatch(0, 1, true);
 
-        (uint256 after_amount_1, , , uint256 after_rewards_1) = staking.getStakingInfo(alice, 0);
-        (uint256 after_amount_2, , , uint256 after_rewards_2) = staking.getStakingInfo(alice, 1);
+        (uint256 after_amount_1, , , uint256 after_rewards_1) = staking.getStakeInfo(alice, 0);
+        (uint256 after_amount_2, , , uint256 after_rewards_2) = staking.getStakeInfo(alice, 1);
 
         assertEq(after_amount_1, 0);
         assertEq(after_amount_2, amount_2);
@@ -776,7 +776,7 @@ contract StakingEnableTest is BaseTest {
 
     function test_getStakingInfoRevertInvalidIndex() public {
         vm.expectRevert("Invalid index for staked records.");
-        staking.getStakingInfo(alice, 0);
+        staking.getStakeInfo(alice, 0);
     }
 
     function test_setStakingEnabledRevertAgain() public {
@@ -816,7 +816,7 @@ contract StakingEnableTest is BaseTest {
         stakeToken.approve(address(staking), 60 ether);
         staking.stake(40 ether, 6);
 
-        (, uint256 lockOn, , ) = staking.getStakingInfo(alice, 0);
+        (, uint256 lockOn, , ) = staking.getStakeInfo(alice, 0);
         // 2 months later
         uint256 current = lockOn + 2 * 30 days;
         vm.warp(current);

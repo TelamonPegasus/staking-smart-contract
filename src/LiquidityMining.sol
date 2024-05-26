@@ -28,7 +28,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     address public claiming;
 
     // status for liquidity is added
-    bool listed;
+    uint256 listedTime;
     // liquidity amount to be listed
     uint256 liquidity;
 
@@ -75,7 +75,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     event RewardTransferred(address indexed user, uint256 amount, uint256 time);
 
     modifier onlyWhenNotListed() {
-        require(!listed, "Liquidity is already listed");
+        require(listedTime == 0, "Liquidity is already listed");
         _;
     }
 
@@ -197,6 +197,9 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
                            External
     ******************************************************/
 
+    /**
+     * @notice deposit ETH for liquidity mining
+     */
     function depositETH() external payable nonReentrant onlyWhenNotListed {
         require(msg.value > 0, "Cannot deposit 0 ETH");
         // verify if deposit is allowed
@@ -206,7 +209,12 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
             require(msg.value >= ALLOWED_MINIMUM_DEPOSIT, "Insufficient deposit amount for minimum allowed");
         }
 
-        (bool depositable, uint256 claimableAmount, uint256 ethValue) = _checkClaimableAmountForDepositETH(msg.sender, msg.value);
+        (
+            bool depositable,
+            uint256 claimableAmount,
+            uint256 ethValue
+        ) = _checkClaimableAmountForDepositETH(msg.sender, msg.value);
+        
         // only presale buyer can deposit ETH
         require(depositable, "You don't have sufficient claimable token amount to deposit ETH");
 
@@ -241,7 +249,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
 
         pair = IUniswapV2Pair(_pair);
 
-        listed = true;
+        listedTime = block.timestamp;
 
         (uint256 reserve0, uint256 reserve1, ) = pair.getReserves();
         uint256 amount;
@@ -274,7 +282,16 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         }
     }
 
+    /**
+     * @notice cancel liquidity mining to receive back funds
+     *
+     * @dev able to only after 7 days later from listing
+     *
+     * @param index index of the deposit array to get reward
+     */
     function removeLiquidity(uint256 index) external nonReentrant {
+        // verify 1 week after listed
+        require(listedTime != 0 && block.timestamp >= listedTime + 7 days, "Cannot remove liquidity until 7 days after listing");
         // verify input argument
         require(index < userDeposits[msg.sender].length, "Invalid index value");
         
@@ -289,6 +306,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         
         uint256 ownLiquidity = liquidity * userDeposit.amount / totalDeposits;
         
+        // remove liquidity and transfer tokens to caller
         (uint256 amountToken, uint256 amountETH) = uniswapV2Router.removeLiquidityETH(
             address(token),
             ownLiquidity,
@@ -342,6 +360,9 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         }
     }
 
+    /**
+     * @notice get the lates ETH/USD price from chainlink price feed
+     */
     function fetchETHUSDPrice() public view returns (uint256 price, uint256 decimals) {
         (, int256 priceInt, , , ) = chainlinkETHUSDContract.latestRoundData();
         decimals = chainlinkETHUSDContract.decimals();
