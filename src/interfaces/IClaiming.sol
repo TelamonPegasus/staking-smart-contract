@@ -7,5 +7,5 @@ interface IClaiming {
 
     function getClaimableAmount(address) external view returns(uint256);
 
-    function transferTokenForAddingLiquidity(uint256) external;
+    function transferTokenToLiquidityMining(uint256) external;
 }

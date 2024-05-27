@@ -26,9 +26,9 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     address public claiming;
 
     // status for liquidity is added
-    uint256 listedTime;
+    uint256 public listedTime;
     // liquidity amount to be listed
-    uint256 liquidity;
+    uint256 public liquidity;
 
     // deposit start time, i.e the time presale is over
     uint256 public depositStart;
@@ -46,18 +46,18 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     // WETH token address
     address public WETH;
     // total deposit ETH
-    uint256 private totalDeposits;
+    uint256 public totalDeposits;
     // user's deposit ETH
     mapping(address => UserDeposit[]) public userDeposits;
     // total deposited amount of each user
-    mapping(address => uint256) private userTotalDeposits;
+    mapping(address => uint256) public userTotalDeposits;
 
     IUniswapV2Pair public pair;
     IUniswapV2Factory public uniswapV2Factory;
     IUniswapV2Router02 public uniswapV2Router;
-    
+
     AggregatorV3Interface internal chainlinkETHUSDContract;
-    
+
     /* ========== EVENTS ========== */
     // Event emitted when a presale buyer deposits ETH
     event Deposited(address indexed user, uint256 amount, uint256 time);
@@ -73,7 +73,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     event RewardTransferred(address indexed user, uint256 amount, uint256 time);
 
     modifier onlyWhenNotListed() {
-        require(listedTime == 0, "Liquidity is already listed");
+        require(listedTime == 0, "Liquidity was already listed");
         _;
     }
 
@@ -88,7 +88,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         // set uniswap factory and router02
         uniswapV2Factory = IUniswapV2Factory(0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f);
         uniswapV2Router = IUniswapV2Router02(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
-        
+
         // set the WETH token address
         WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
 
@@ -146,7 +146,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
      */
     function setClaimingContract(address _claiming) external onlyOwner {
         // verify input argument
-        require(_claiming != address(0), "Reward token address cannot be zero address");
+        require(_claiming != address(0), "Contract address cannot be zero address");
 
         claiming = _claiming;
     }
@@ -226,8 +226,10 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
      */
     function addLiquidity(address _pair) external onlyOwner onlyWhenNotListed {
         require(address(token) != address(0), "Sale token address cannot be zero");
+
         // verify passed pair address with sale token and WETH 
-        require(uniswapV2Factory.getPair(address(token), WETH) == _pair, "The pair address is invalid");
+        // require(uniswapV2Factory.getPair(address(token), WETH) == _pair, "The pair address is invalid");
+        
         // verify sufficient ETH balance to add liquidity
         require(totalDeposits != 0, "Insufficient ETH balance to mint LP");
 
@@ -244,20 +246,19 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         }
 
         // get the sale token from the claiming contract for adding liquidity
-        IClaiming(claiming).transferTokenForAddingLiquidity(amount);
+        IClaiming(claiming).transferTokenToLiquidityMining(amount);
 
         // Approve router to mint LP
         token.approve(address(uniswapV2Router), amount);
 
         try uniswapV2Router.addLiquidityETH{value: totalDeposits} ( // Amount of ETH to send for LP on univ2
             address(token),
-            amount,
+            2 * amount, // to calc as WETH desired quote
             100, // Infinite slippage basically since it's in wei
             totalDeposits, // should add liquidity this amount exactly
             address(this), // Transfer LP token to this contract
             block.timestamp
         ) returns (uint256 , uint256 , uint256 liquidityAmount) {
-            totalDeposits = 0;
             liquidity = liquidityAmount;
 
             emit LiquidityAdded(msg.sender, liquidityAmount, block.timestamp);
@@ -289,6 +290,8 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         require(liquidity != 0, "There is no liquidity in the contract");
         
         uint256 ownLiquidity = liquidity * userDeposit.amount / totalDeposits;
+
+        pair.approve(address(uniswapV2Router), ownLiquidity);
         
         // remove liquidity and transfer tokens to caller
         (uint256 amountToken, uint256 amountETH) = uniswapV2Router.removeLiquidityETH(
@@ -303,10 +306,10 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         emit LiquidityRemoved(msg.sender, ownLiquidity, amountToken, amountETH, block.timestamp);
 
         // transfer reward token
-        uint256 rewardAmount = getRewardTokenAmount(msg.sender, index);
-        token.safeTransfer(msg.sender, rewardAmount);
+        // uint256 rewardAmount = getRewardTokenAmount(msg.sender, index);
+        // token.safeTransfer(msg.sender, rewardAmount);
 
-        emit RewardTransferred(msg.sender, rewardAmount, block.timestamp);
+        // emit RewardTransferred(msg.sender, rewardAmount, block.timestamp);
     }
 
     /*****************************************************
@@ -345,6 +348,36 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     }
 
     /**
+     * @notice get user's deposit info at particular index
+     *
+     * @param user address of the user to get the info
+     * @param index index of the deposit array of user
+     */
+    function getUserDepositInfo(
+        address user,
+        uint256 index
+    ) public view returns (
+        uint256,
+        uint256,
+        bool
+    ) {
+        UserDeposit storage userDeposit = userDeposits[user][index];
+
+        return (
+            userDeposit.amount,
+            userDeposit.depositOn,
+            userDeposit.removed
+        );
+    }
+
+    /**
+     * @notice get user's total deposited ETH amount
+     */
+    function getUserTotalDeposit(address user) public view returns(uint256) {
+        return userTotalDeposits[user];
+    }
+
+    /**
      * @notice get the lates ETH/USD price from chainlink price feed
      */
     function fetchETHUSDPrice() public view returns (uint256 price, uint256 decimals) {
@@ -368,7 +401,8 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         // get the latest ETH price and decimals
         (uint256 price, uint256 decimals) = fetchETHUSDPrice();
 
-        // calculate deposited ETH market value (didn't divide with 10 ** 18, because the sale token's decimals is also 18)
+        // calculate deposited ETH market value
+        // @note (didn't divide with 10 ** 18, because the sale token's decimals is also 18)
         ethValue = ethAmount * price / (10 ** decimals);
 
         // get current claimable token amount for user
