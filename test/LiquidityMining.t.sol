@@ -278,12 +278,12 @@ contract LiquidityTest is BaseTest() {
         }
         console.log("Sale token was transferred from claiming: ", amount / 1 ether);
 
-        liquidityMining.addLiquidity(address(pair));
+        liquidityMining.listLiquidity(address(pair));
         console.log("Minted liquidity: ", liquidityMining.liquidity() / 1 ether);
 
         // revert when add liquidity again
         vm.expectRevert("Liquidity was already listed");
-        liquidityMining.addLiquidity(address(pair));
+        liquidityMining.listLiquidity(address(pair));
 
         // revert when deposit ETH after listing
         vm.expectRevert("Liquidity was already listed");
@@ -302,7 +302,7 @@ contract LiquidityTest is BaseTest() {
         _depositETH();
         deal(address(token), address(claiming), 1000000 ether);
 
-        liquidityMining.addLiquidity(address(pair));
+        liquidityMining.listLiquidity(address(pair));
         
         vm.warp(block.timestamp + 6 days);
         vm.expectRevert("Cannot remove liquidity until 7 days after listing");
@@ -319,7 +319,7 @@ contract LiquidityTest is BaseTest() {
         _depositETH();
         deal(address(token), address(claiming), 1000000 ether);
 
-        liquidityMining.addLiquidity(address(pair));
+        liquidityMining.listLiquidity(address(pair));
         
         vm.warp(block.timestamp + 7 days);
 
