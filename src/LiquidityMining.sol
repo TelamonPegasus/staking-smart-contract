@@ -17,6 +17,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     struct UserDeposit {
         uint256 amount;
         uint256 depositOn;
+        uint256 liquidity;
         bool removed;
     }
 
@@ -28,7 +29,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     // status for liquidity is added
     uint256 public listedTime;
     // liquidity amount to be listed
-    uint256 public liquidity;
+    uint256 public listedLiquidity;
 
     // deposit start time, i.e the time presale is over
     uint256 public depositStart;
@@ -53,7 +54,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     mapping(address => uint256) public userTotalDeposits;
 
     // states for reward
-    mapping(address => uint256 => uint256) public userDailyHistory; // user => day => amount
+    mapping(address => mapping(uint256 => uint256)) public userDailyHistory; // user => day => amount
     mapping(address => uint256) public userLastUpdateDay; // user => day
     mapping(uint256 => uint256) public dailyTotalHistory; // day => amount
     uint256 public lastUpdateDay;
@@ -80,6 +81,11 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
 
     modifier onlyWhenNotListed() {
         require(listedTime == 0, "Liquidity was already listed");
+        _;
+    }
+
+    modifier onlyWhenListed() {
+        require(listedTime != 0, "Liquidity wasn't listed yet");
         _;
     }
 
@@ -214,6 +220,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         userDeposits[msg.sender].push(UserDeposit({
             amount: msg.value,
             depositOn: block.timestamp,
+            liquidity: 0,
             removed: false
         }));
 
@@ -233,16 +240,22 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
 
         if (userDailyHistory[user][today] == 0) {
             // if it is the first updating for today, update with last update day's amount
-            uint256 lastDay = userLastUpdateDay[user];
-            userDailyHistory[user][today] = userDailyHistory[user][lastDay];
+            uint256 userLastDay = userLastUpdateDay[user];
+            userDailyHistory[user][today] = userDailyHistory[user][userLastDay];
         }
 
         userDailyHistory[user][today] += amount;
         userLastUpdateDay[user] = today;
+
+        if (today != lastUpdateDay) {
+            dailyTotalHistory[today] = dailyTotalHistory[lastUpdateDay];
+        }
+        dailyTotalHistory[today] += amount;
+        lastUpdateDay = today;
     }
 
     /**
-     * @notice Add liquidity of ETH/Token to UniV2
+     * @notice List liquidity of deposited ETH and some Token to UniV2
      *
      * @param _pair the address of pair pool on Uni v2
      */
@@ -280,10 +293,10 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
             totalDeposits, // should add liquidity this amount exactly
             address(this), // Transfer LP token to this contract
             block.timestamp
-        ) returns (uint256 , uint256 , uint256 liquidityAmount) {
-            liquidity = liquidityAmount;
+        ) returns (uint256 , uint256 , uint256 liquidity) {
+            listedLiquidity = liquidity;
 
-            emit LiquidityAdded(msg.sender, liquidityAmount, block.timestamp);
+            emit LiquidityAdded(msg.sender, listedLiquidity, block.timestamp);
         } catch {
             revert(string("Adding liquidity was failed"));
         }
@@ -296,9 +309,9 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
      *
      * @param index index of the deposit array to get reward
      */
-    function removeLiquidity(uint256 index) external nonReentrant {
+    function removeLiquidity(uint256 index) external nonReentrant onlyWhenListed {
         // verify 1 week after listed
-        require(listedTime != 0 && block.timestamp >= listedTime + 7 days, "Cannot remove liquidity until 7 days after listing");
+        require(block.timestamp >= listedTime + 7 days, "Cannot remove liquidity until 7 days after listing");
         // verify input argument
         require(index < userDeposits[msg.sender].length, "Invalid index value");
         
@@ -308,10 +321,17 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         // update the removed flag as true
         userDeposit.removed = true;
 
-        // valid if liquidity exists
-        require(liquidity != 0, "There is no liquidity in the contract");
-        
-        uint256 ownLiquidity = liquidity * userDeposit.amount / totalDeposits;
+        uint256 ownLiquidity;
+        if (userDeposit.liquidity != 0) {
+            // if liquidity after listing
+            ownLiquidity = userDeposit.liquidity;
+        } else {
+            // if liquidity before listing
+            // valid if liquidity exists
+            require(listedLiquidity != 0, "There is no liquidity in the contract");
+            
+            ownLiquidity = listedLiquidity * userDeposit.amount / totalDeposits;
+        }
 
         pair.approve(address(uniswapV2Router), ownLiquidity);
         
@@ -332,6 +352,59 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         // token.safeTransfer(msg.sender, rewardAmount);
 
         // emit RewardTransferred(msg.sender, rewardAmount, block.timestamp);
+    }
+
+    function addLiquidity(uint256 amount) external payable nonReentrant onlyWhenListed {
+        require(msg.value != 0, "Invalid ETH deposit");
+        require(amount != 0 , "Invalid token deposit");
+
+        // transfer token from user to mining contract here
+        token.safeTransferFrom(msg.sender, address(this), amount);
+        // approve router to transfer token from mining to pair
+        token.approve(address(uniswapV2Router), amount);
+
+        // add liquidity by depositing both of token and ETH
+        try uniswapV2Router.addLiquidityETH{value: msg.value} (
+            address(token),
+            amount, // to calc as WETH desired quote
+            100, // Infinite slippage basically since it's in wei
+            100, // Infinite slippage basically since it's in wei
+            address(this), // Transfer LP token to this contract
+            block.timestamp
+        ) returns (uint256 amountToken, uint256 amountETH, uint256 liquidity) {
+            if (amount > amountToken) {
+                // refund left token to the user back
+                token.safeTransfer(msg.sender, amount - amountToken);
+            }
+
+            if (msg.value > amountETH) {
+                // refund left ETH to the user back
+                ( bool success, ) = address(msg.sender).call{
+                    value: msg.value - amountETH,
+                    gas: 35000 // limit gas fee to prevent hook operation
+                }("");
+                require(success, "Failed to refund Ether");
+            }
+
+            userDeposits[msg.sender].push(UserDeposit({
+                amount: amountETH,
+                depositOn: block.timestamp,
+                liquidity: liquidity,
+                removed: false
+            }));
+
+            userTotalDeposits[msg.sender] += amountETH;
+
+            // TODO consider using this `totalDeposits` state seriously
+            // increase total deposit amount
+            // totalDeposits += amountETH;
+
+            _updateHistoryForReward(msg.sender, amountETH);
+
+            emit LiquidityAdded(msg.sender, liquidity, block.timestamp);
+        } catch {
+            revert(string("Adding liquidity was failed"));
+        }
     }
 
     /*****************************************************
