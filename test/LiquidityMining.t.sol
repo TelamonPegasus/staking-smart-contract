@@ -260,12 +260,12 @@ contract LiquidityTest is BaseTest() {
         pair = IUniswapV2Pair(uniswapFactory.getPair(address(token), liquidityMining.WETH()));
     }
 
-    function test_addLiquidityRevertZeroDeposits() public {
+    function test_listLiquidityRevertZeroDeposits() public {
         vm.expectRevert("Insufficient ETH balance to mint LP");
-        liquidityMining.addLiquidity(address(pair));
+        liquidityMining.listLiquidity(address(pair));
     }
 
-    function test_addLiquidity() public {
+    function test_listLiquidity() public {
         _depositETH();
         deal(address(token), address(claiming), 1000000 ether);
 
@@ -279,7 +279,7 @@ contract LiquidityTest is BaseTest() {
         console.log("Sale token was transferred from claiming: ", amount / 1 ether);
 
         liquidityMining.listLiquidity(address(pair));
-        console.log("Minted liquidity: ", liquidityMining.liquidity() / 1 ether);
+        console.log("Minted liquidity: ", liquidityMining.listedLiquidity() / 1 ether);
 
         // revert when add liquidity again
         vm.expectRevert("Liquidity was already listed");
@@ -326,7 +326,7 @@ contract LiquidityTest is BaseTest() {
         uint256 originalETH = address(alice).balance;
         uint256 originalToken = token.balanceOf(alice);
         uint256 originalLiquidity = pair.balanceOf(address(liquidityMining));
-        assertEq(originalLiquidity, liquidityMining.liquidity());
+        assertEq(originalLiquidity, liquidityMining.listedLiquidity());
 
         vm.prank(alice);
         liquidityMining.removeLiquidity(0);
