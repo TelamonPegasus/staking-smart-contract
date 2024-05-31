@@ -54,8 +54,12 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     mapping(address => uint256) public userTotalDeposits;
 
     // states for reward
+    uint256 public startDay;
+    uint256 public rewardPeriod;
+    uint256 public totalReward;
     mapping(address => mapping(uint256 => uint256)) public userDailyHistory; // user => day => amount
     mapping(address => uint256) public userLastUpdateDay; // user => day
+    mapping(address => uint256) public lastRewardClaimedDay; // user => day
     mapping(uint256 => uint256) public dailyTotalHistory; // day => amount
     uint256 public lastUpdateDay;
 
@@ -78,6 +82,10 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     event LiquidityRemoved(address indexed user, uint256 ownLiquidity, uint256 amountToken, uint256 amountETH, uint256 time);
     // Event emitted when reward token is transferred
     event RewardTransferred(address indexed user, uint256 amount, uint256 time);
+    // Event emitted when reward token is deposited by the owner
+    event TokenDepositedForReward(address indexed user, uint256 amount, uint256 time);
+    // Event emitted when the owner updates the reward program states
+    event RewardProgramPlanUpdated(address indexed user, uint256 startDay, uint256 period, uint256 totalReward, uint256 time);
 
     modifier onlyWhenNotListed() {
         require(listedTime == 0, "Liquidity was already listed");
@@ -189,6 +197,27 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         pair = IUniswapV2Pair(_pair);
     }
 
+    /**
+     * @notice Set the variants for reward program
+     *
+     * @param _period reward program period in days
+     * @param _start reward program start time in timestamp
+     * @param _total total reward token amount
+     */
+    function setRewardProgramPlan(uint256 _start, uint256 _period, uint256 _total) external onlyOwner {
+        // verify input argument
+        require(_start != 0, "Invalid reward start time");
+        require(_period != 0, "Invalid reward period");
+        require(_total != 0, "Invalid reward token amount");
+
+        // set the start day at the 00h:00min of the start day
+        startDay = _start / 1 days;
+        rewardPeriod = _period;
+        totalReward = _total;
+
+        emit RewardProgramPlanUpdated(msg.sender, startDay, rewardPeriod, totalReward, block.timestamp);
+    }
+
     /******************************************************
                            External
     ******************************************************/
@@ -236,7 +265,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
 
     function _updateHistoryForReward(address user, uint256 amount) private {
         // get the today number
-        uint256 today = block.timestamp / 86400;
+        uint256 today = block.timestamp / 1 days;
 
         if (userDailyHistory[user][today] == 0) {
             // if it is the first updating for today, update with last update day's amount
@@ -411,40 +440,47 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
 
     }
 
-    function depositRewardTokens()
+    // deposit tokens for reward program of liquidity mining
+    function depositRewardTokens(uint256 amount) external onlyOwner {
+        // verity input argument
+        require(amount != 0, "Invalid token amount");
+
+        // transfer token for reward from caller to this contract
+        token.safeTransferFrom(msg.sender, address(this), amount);
+
+        emit TokenDepositedForReward(msg.sender, amount, block.timestamp);
+    }
 
     /*****************************************************
                             Getter
     *****************************************************/
 
     /**
-     * @notice Get the reward token amount for deposited ETH
+     * @notice Get the reward token amount based on the reward program
      *
      * @param user address of user to get the reward
-     * @param index index of the deposit array to get reward
      *
-     * TODO should consider mining is performed
+     * TODO should consider mining is performed?
      */
-    function getRewardTokenAmount(address user, uint256 index) public view returns(uint256 rewardAmount) {
+    function getRewardTokenAmount(address user) public view returns(uint256 rewardAmount, uint256 lastCheckpointDay) {
         // verify input argument
         require(user != address(0), "Invalid user address");
-        require(index < userDeposits[msg.sender].length, "Invalid index value");
         
-        UserDeposit storage userDeposit = userDeposits[user][index];
-
-        uint256 depositAmount = userDeposit.amount;
-
-        uint256 period = block.timestamp - userDeposit.depositOn;
-        if (period <= 30 days) {
-            rewardAmount = depositAmount * REWARD_RATE_1M / DENOMINATOR;
-        } else if (period <= 60 days) {
-            rewardAmount = depositAmount * REWARD_RATE_2M / DENOMINATOR;
-        } else if (period <= 90 days) {
-            rewardAmount = depositAmount * REWARD_RATE_3M / DENOMINATOR;
-        } else if (period <= 120 days) {
-            rewardAmount = depositAmount * REWARD_RATE_4M / DENOMINATOR;
-        } else {
-            rewardAmount = depositAmount * REWARD_RATE_5M / DENOMINATOR;
+        // get the today
+        uint255 today = block.timestamp / 1 days;
+        // get the reward end day (the next day of end day, indeed)
+        uint256 rewardEndDay = startDay + period;
+        // get the last day when user claimed reward
+        uint256 lastClaimDay = lastRewardClaimedDay[user];
+        lastCheckpointDay = lastCheckpointDay[user];
+        uint256 endDay = today > rewardEndDay ?  rewardEndDay : today;
+        for (uint256 day = lastClaimDay; day < endDay; ) {
+            if (userDailyHistory[user][day] != 0) {
+                // TODO consider decreased 0 amount
+            }
+            unchecked {
+                ++day;
+            }
         }
     }
 
@@ -503,7 +539,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         (uint256 price, uint256 decimals) = fetchETHUSDPrice();
 
         // calculate deposited ETH market value
-        // @note (didn't divide with 10 ** 18, because the sale token's decimals is also 18)
+        // @note (not divide with 10^18, because the sale token's decimals is also 18)
         ethValue = ethAmount * price / (10 ** decimals);
 
         // get current claimable token amount for user
