@@ -267,8 +267,6 @@ contract Staking is Ownable {
      * 
      * @param staker address of staker
      * @param index index of staking to be checked
-     *
-     * @return 
      */
     function isStaked(address staker, uint256 index) public view returns(bool) {
         // verify input argument
