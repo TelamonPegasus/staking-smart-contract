@@ -52,6 +52,12 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     // total deposited amount of each user
     mapping(address => uint256) public userTotalDeposits;
 
+    // states for reward
+    mapping(address => uint256 => uint256) public userDailyHistory; // user => day => amount
+    mapping(address => uint256) public userLastUpdateDay; // user => day
+    mapping(uint256 => uint256) public dailyTotalHistory; // day => amount
+    uint256 public lastUpdateDay;
+
     IUniswapV2Pair public pair;
     IUniswapV2Factory public uniswapV2Factory;
     IUniswapV2Router02 public uniswapV2Router;
@@ -216,7 +222,23 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         // increase total deposit amount
         totalDeposits += msg.value;
 
+        _updateHistoryForReward(msg.sender, msg.value);
+
         emit Deposited(msg.sender, msg.value, block.timestamp);
+    }
+
+    function _updateHistoryForReward(address user, uint256 amount) private {
+        // get the today number
+        uint256 today = block.timestamp / 86400;
+
+        if (userDailyHistory[user][today] == 0) {
+            // if it is the first updating for today, update with last update day's amount
+            uint256 lastDay = userLastUpdateDay[user];
+            userDailyHistory[user][today] = userDailyHistory[user][lastDay];
+        }
+
+        userDailyHistory[user][today] += amount;
+        userLastUpdateDay[user] = today;
     }
 
     /**
@@ -224,7 +246,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
      *
      * @param _pair the address of pair pool on Uni v2
      */
-    function addLiquidity(address _pair) external onlyOwner onlyWhenNotListed {
+    function listLiquidity(address _pair) external onlyOwner onlyWhenNotListed {
         require(address(token) != address(0), "Sale token address cannot be zero");
 
         // verify passed pair address with sale token and WETH 
