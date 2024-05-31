@@ -407,6 +407,12 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         }
     }
 
+    function claimReward() external {
+
+    }
+
+    function depositRewardTokens()
+
     /*****************************************************
                             Getter
     *****************************************************/
