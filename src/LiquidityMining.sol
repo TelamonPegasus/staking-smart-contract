@@ -58,8 +58,9 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     uint256 public rewardPeriod;
     uint256 public totalReward;
     mapping(address => mapping(uint256 => uint256)) public userDailyHistory; // user => day => amount
-    mapping(address => uint256) public userLastUpdateDay; // user => day
-    mapping(address => uint256) public lastRewardClaimedDay; // user => day
+    mapping(address => uint256) public userLastUpdateDay; // user => day (last day that daily history was updated)
+    mapping(address => uint256) public lastRewardClaimDay; // user => day (last day that claimed reward)
+    mapping(address => uint256) public lastCheckpointDay; // user => day (last day that was considered in reward calculation)
     mapping(uint256 => uint256) public dailyTotalHistory; // day => amount
     uint256 public lastUpdateDay;
 
@@ -462,24 +463,40 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
      *
      * TODO should consider mining is performed?
      */
-    function getRewardTokenAmount(address user) public view returns(uint256 rewardAmount, uint256 lastCheckpointDay) {
+    function getRewardTokenAmount(address user) public view returns(
+        uint256 rewardAmount,
+        uint256 lastCpDay
+    ) {
         // verify input argument
         require(user != address(0), "Invalid user address");
         
+        // get the daily rewardable amount
+        uint256 dailyReward = totalReward / rewardPeriod;
+
         // get the today
-        uint255 today = block.timestamp / 1 days;
+        uint256 today = block.timestamp / 1 days;
         // get the reward end day (the next day of end day, indeed)
-        uint256 rewardEndDay = startDay + period;
+        uint256 rewardEndDay = startDay + rewardPeriod;
         // get the last day when user claimed reward
-        uint256 lastClaimDay = lastRewardClaimedDay[user];
-        lastCheckpointDay = lastCheckpointDay[user];
+        uint256 lastClaimDay = lastRewardClaimDay[user];
+
+        lastCpDay = lastCheckpointDay[user];
         uint256 endDay = today > rewardEndDay ?  rewardEndDay : today;
-        for (uint256 day = lastClaimDay; day < endDay; ) {
+        for (uint256 day = lastClaimDay; day < endDay; ++day) {
             if (userDailyHistory[user][day] != 0) {
+                // TODO need to validate if denominator is not zero
+                rewardAmount += dailyReward * userDailyHistory[user][day] / dailyTotalHistory[day];
+                lastCpDay = day;
+            } else {
                 // TODO consider decreased 0 amount
-            }
-            unchecked {
-                ++day;
+
+                // continue if total deposit ETH is zero
+                if (
+                    dailyTotalHistory[lastCpDay] == 0 ||
+                    userDailyHistory[user][lastCpDay] == 0
+                ) continue;
+
+                rewardAmount += dailyReward * userDailyHistory[user][day] / dailyTotalHistory[day];
             }
         }
     }
