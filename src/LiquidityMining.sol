@@ -153,7 +153,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
      */
     function setDepositStart(uint256 _depositStart) external onlyOwner {
         // verify input argument
-        require(_depositStart > block.timestamp, "Invalid time for start deposit.");
+        require(_depositStart >= block.timestamp, "Invalid time for start deposit.");
 
         depositStart = _depositStart;
 
@@ -201,13 +201,13 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Set the variants for reward program
+     * @notice Set the states for reward program
      *
      * @param _period reward program period in days
      * @param _start reward program start time in timestamp
      * @param _total total reward token amount
      */
-    function setRewardProgramPlan(uint256 _start, uint256 _period, uint256 _total) external onlyOwner {
+    function setRewardStates(uint256 _start, uint256 _period, uint256 _total) external onlyOwner {
         // verify setting of deposit start date
         require(depositStart != 0, "Deposit start time should be set");
 
