@@ -60,9 +60,11 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     mapping(address => mapping(uint256 => uint256)) public userDailyHistory; // user => day => amount
     mapping(address => uint256) public userLastUpdateDay; // user => day (last day that daily history was updated)
     mapping(address => uint256) public lastRewardClaimDay; // user => day (last day that claimed reward)
-    mapping(address => uint256) public lastCheckpointDay; // user => day (last day that was considered in reward calculation)
+    mapping(address => uint256) public lastCheckpointDay; // user => day (last day that was considered in reward calculation for user deposit)
+    mapping(address => uint256) public lastTotalCheckpointDay; // user => day (last day that was considered in reward calculation for total deposit)
     mapping(uint256 => uint256) public dailyTotalHistory; // day => amount
     uint256 public lastUpdateDay;
+    uint256 public firstCheckpointDay;
 
     IUniswapV2Pair public pair;
     IUniswapV2Factory public uniswapV2Factory;
@@ -206,13 +208,26 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
      * @param _total total reward token amount
      */
     function setRewardProgramPlan(uint256 _start, uint256 _period, uint256 _total) external onlyOwner {
+        // verify setting of deposit start date
+        require(depositStart != 0, "Deposit start time should be set");
+
         // verify input argument
         require(_start != 0, "Invalid reward start time");
+        require(_start >= depositStart, "Cannot be before deposit start time");
         require(_period != 0, "Invalid reward period");
         require(_total != 0, "Invalid reward token amount");
 
         // set the start day at the 00h:00min of the start day
         startDay = _start / 1 days;
+
+        uint256 day = depositStart / 1 days;
+        while (day < startDay) {
+            if (dailyTotalHistory[day] != 0)
+                firstCheckpointDay = day;
+
+            ++day;
+        }
+
         rewardPeriod = _period;
         totalReward = _total;
 
@@ -279,6 +294,10 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
 
         if (today != lastUpdateDay) {
             dailyTotalHistory[today] = dailyTotalHistory[lastUpdateDay];
+        }
+        // udpate the first checkpoint for reward
+        if (today <= startDay) {
+            firstCheckpointDay = today;
         }
         dailyTotalHistory[today] += amount;
         lastUpdateDay = today;
@@ -438,7 +457,37 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     }
 
     function claimReward() external {
+        // verify deposit and reward start time
+        require(depositStart > 0, "Invalid deposit start time");
+        require(startDay > 0, "Invalid reward start time");
+        require(block.timestamp / 1 days > startDay, "Invalid date to claim reward");
 
+        // if it is frist claiming, update checkpoint for reward start day
+        if (lastRewardClaimDay[msg.sender] == 0) {
+            uint256 day = depositStart / 1 days;
+            while (day < startDay) {
+                if (userDailyHistory[msg.sender][day] != 0)
+                    lastCheckpointDay[msg.sender] = day;
+
+                ++day;
+            }
+
+            lastTotalCheckpointDay[msg.sender] = firstCheckpointDay;
+        }
+
+        (
+            uint256 rewardAmount,
+            uint256 lastCpDay, 
+            uint256 lastTotalCpDay
+        ) = getRewardTokenAmount(msg.sender);
+
+        if (rewardAmount > 0)
+            token.safeTransfer(msg.sender, rewardAmount);
+
+        // update last claim day as today
+        lastRewardClaimDay[msg.sender] = block.timestamp / 1 days;
+        lastCheckpointDay[msg.sender] = lastCpDay;
+        lastTotalCheckpointDay[msg.sender] = lastTotalCpDay;
     }
 
     // deposit tokens for reward program of liquidity mining
@@ -465,8 +514,11 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
      */
     function getRewardTokenAmount(address user) public view returns(
         uint256 rewardAmount,
-        uint256 lastCpDay
+        uint256 lastCpDay,
+        uint256 lastTotalCpDay
     ) {
+        // TODO verify reward params was set
+
         // verify input argument
         require(user != address(0), "Invalid user address");
         
@@ -478,25 +530,36 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         // get the reward end day (the next day of end day, indeed)
         uint256 rewardEndDay = startDay + rewardPeriod;
         // get the last day when user claimed reward
-        uint256 lastClaimDay = lastRewardClaimDay[user];
+        uint256 lastClaimDay = (
+            lastRewardClaimDay[user] == 0 ||
+            lastRewardClaimDay[user] < startDay
+        ) ? startDay : lastRewardClaimDay[user];
 
         lastCpDay = lastCheckpointDay[user];
+        lastTotalCpDay = lastTotalCheckpointDay[user];
         uint256 endDay = today > rewardEndDay ?  rewardEndDay : today;
         for (uint256 day = lastClaimDay; day < endDay; ++day) {
+            uint256 totalCheckpoint;
+            if (dailyTotalHistory[day] != 0) {
+                totalCheckpoint = dailyTotalHistory[day];
+                lastTotalCpDay = day;
+            } else {
+                totalCheckpoint = dailyTotalHistory[lastTotalCpDay];
+            }
+
+            if (totalCheckpoint == 0) continue;
+
             if (userDailyHistory[user][day] != 0) {
                 // TODO need to validate if denominator is not zero
-                rewardAmount += dailyReward * userDailyHistory[user][day] / dailyTotalHistory[day];
+                rewardAmount += dailyReward * userDailyHistory[user][day] / totalCheckpoint;
                 lastCpDay = day;
             } else {
                 // TODO consider decreased 0 amount
 
-                // continue if total deposit ETH is zero
-                if (
-                    dailyTotalHistory[lastCpDay] == 0 ||
-                    userDailyHistory[user][lastCpDay] == 0
-                ) continue;
+                // continue if user deposit ETH is zero
+                if (userDailyHistory[user][lastCpDay] == 0) continue;
 
-                rewardAmount += dailyReward * userDailyHistory[user][day] / dailyTotalHistory[day];
+                rewardAmount += dailyReward * userDailyHistory[user][lastCpDay] / totalCheckpoint;
             }
         }
     }
