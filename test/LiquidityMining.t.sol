@@ -218,12 +218,12 @@ contract DepositTest is BaseTest {
     }
 }
 
-contract LiquidityTest is BaseTest() {
+contract LiquidityBaseTest is BaseTest {
     IUniswapV2Pair public pair;
     IUniswapV2Router02 public uniswapRouter;
     IUniswapV2Factory public uniswapFactory;
 
-    function setUp() public override {
+    function setUp() public override virtual {
         super.setUp();
 
         liquidityMining.setDepositStart(block.timestamp + 1);
@@ -260,6 +260,25 @@ contract LiquidityTest is BaseTest() {
         pair = IUniswapV2Pair(uniswapFactory.getPair(address(token), liquidityMining.WETH()));
     }
 
+    function _depositETH() internal {
+        vm.prank(alice);
+        liquidityMining.depositETH{value: 2 ether}(); // about 7500 USD
+        vm.prank(bob);
+        liquidityMining.depositETH{value: 1 ether}(); // under 4000 USD
+        vm.prank(alice);
+        liquidityMining.depositETH{value: 0.5 ether}(); // under 2000 USD
+        assertEq(liquidityMining.totalDeposits(), 3.5 ether);
+        assertEq(address(liquidityMining).balance, 3.5 ether);
+
+        vm.warp(block.timestamp + 14 days); // 2 weeks later
+    }
+}
+
+contract LiquidityTest is LiquidityBaseTest {
+    function setUp() public override {
+        super.setUp();
+    }
+
     function test_listLiquidityRevertZeroDeposits() public {
         vm.expectRevert("Insufficient ETH balance to mint LP");
         liquidityMining.listLiquidity(address(pair));
@@ -293,6 +312,7 @@ contract LiquidityTest is BaseTest() {
 
     function test_removeLiquidityRevertBeforeListing() public {
         _depositETH();
+        liquidityMining.listLiquidity(address(pair));
         vm.expectRevert("Cannot remove liquidity until 7 days after listing");
         vm.prank(alice);
         liquidityMining.removeLiquidity(0);
@@ -346,17 +366,10 @@ contract LiquidityTest is BaseTest() {
         vm.prank(alice);
         liquidityMining.removeLiquidity(0);
     }
+}
 
-    function _depositETH() private {
-        vm.prank(alice);
-        liquidityMining.depositETH{value: 2 ether}(); // about 7500 USD
-        vm.prank(bob);
-        liquidityMining.depositETH{value: 1 ether}(); // under 4000 USD
-        vm.prank(alice);
-        liquidityMining.depositETH{value: 0.5 ether}(); // under 2000 USD
-        assertEq(liquidityMining.totalDeposits(), 3.5 ether);
-        assertEq(address(liquidityMining).balance, 3.5 ether);
-
-        vm.warp(block.timestamp + 14 days); // 2 weeks later
+contract LiquidityRewardTest is LiquidityBaseTest {
+    function setUp() public override {
+        super.setUp();
     }
 }
