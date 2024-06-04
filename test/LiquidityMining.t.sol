@@ -64,6 +64,7 @@ contract SetterTest is BaseTest {
     }
 
     function test_setDepositRevertInvalidStartTime(uint16 diff) public {
+        vm.assume(diff != 0);
         uint256 startTime = block.timestamp - uint256(diff);
 
         vm.expectRevert("Invalid time for start deposit.");
@@ -71,8 +72,6 @@ contract SetterTest is BaseTest {
     }
 
     function test_setDepositStart(uint16 diff) public {
-        vm.assume(diff != 0);
-
         uint256 startTime = block.timestamp + diff;
         liquidityMining.setDepositStart(startTime);
         assertEq(liquidityMining.depositStart(), startTime);
@@ -122,14 +121,38 @@ contract SetterTest is BaseTest {
         vm.prank(alice);
         liquidityMining.depositETH{value: 1 ether}();
     }
+
+    // states for liquidity reward
+    function test_setRewardStatesRevertWhenZeroDepositStart() public {
+        vm.expectRevert("Deposit start time should be set");
+        liquidityMining.setRewardStates(block.timestamp, 70, 700 ether);
+    }
+
+    function test_setRewardStatesRevertInvalidValue(uint16 diff) public {
+        vm.assume(diff > 0);
+
+        uint256 depositStart = block.timestamp;
+        liquidityMining.setDepositStart(depositStart);
+
+        vm.expectRevert("Invalid reward start time");
+        liquidityMining.setRewardStates(0, 70, 700 ether);
+
+        vm.expectRevert("Cannot be before deposit start time");
+        liquidityMining.setRewardStates(block.timestamp - diff, 70, 700 ether);
+        
+        vm.expectRevert("Invalid reward period");
+        liquidityMining.setRewardStates(block.timestamp, 0, 700 ether);
+
+        vm.expectRevert("Invalid reward token amount");
+        liquidityMining.setRewardStates(block.timestamp, 70, 0);
+    }
 }
 
 contract DepositTest is BaseTest {
     function setUp() public override {
         super.setUp();
 
-        liquidityMining.setDepositStart(block.timestamp + 1);
-        vm.warp(block.timestamp + 1);
+        liquidityMining.setDepositStart(block.timestamp);
 
         claiming = new Claiming(address(token));
         claiming.setLiquidityMiningContract(address(liquidityMining));
@@ -226,8 +249,7 @@ contract LiquidityBaseTest is BaseTest {
     function setUp() public override virtual {
         super.setUp();
 
-        liquidityMining.setDepositStart(block.timestamp + 1);
-        vm.warp(block.timestamp + 1);
+        liquidityMining.setDepositStart(block.timestamp);
 
         claiming = new Claiming(address(token));
         claiming.setLiquidityMiningContract(address(liquidityMining));
@@ -371,5 +393,9 @@ contract LiquidityTest is LiquidityBaseTest {
 contract LiquidityRewardTest is LiquidityBaseTest {
     function setUp() public override {
         super.setUp();
+    }
+
+    function test_claimRewards() public {
+
     }
 }
