@@ -284,12 +284,12 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         // increase total deposit amount
         totalDeposits += msg.value;
 
-        _updateHistoryForReward(msg.sender, msg.value);
+        _updateHistoryForReward(msg.sender, msg.value, false);
 
         emit Deposited(msg.sender, msg.value, block.timestamp);
     }
 
-    function _updateHistoryForReward(address user, uint256 amount) private {
+    function _updateHistoryForReward(address user, uint256 amount, bool isRemove) private {
         // get the today number
         uint256 today = block.timestamp / 1 days;
 
@@ -305,9 +305,6 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
             lastCp.next = today;
         }
 
-        todayCp.amount += amount;
-        userLastUpdateDay[user] = today;
-
         Checkpoint storage todayTotalCp = dailyTotalHistory[today];
         if (today != lastUpdateDay) {
             Checkpoint storage lastTotalCp = dailyTotalHistory[lastUpdateDay];
@@ -315,7 +312,15 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
             todayTotalCp.prev = lastUpdateDay;
             lastTotalCp.next = today;
         }
-        todayTotalCp.amount += amount;
+
+        if (isRemove) {
+            todayCp.amount -= amount;
+            todayTotalCp.amount -= amount;
+        } else {
+            todayCp.amount += amount;
+            todayTotalCp.amount += amount;
+        }
+        userLastUpdateDay[user] = today;
         lastUpdateDay = today;
         // udpate the first checkpoint for reward
         if (today <= startDay) {
@@ -398,6 +403,8 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         // update the removed flag as true
         userDeposit.removed = true;
 
+        userTotalDeposits[msg.sender] -= userDeposit.amount;
+
         uint256 ownLiquidity;
         if (userDeposit.liquidity != 0) {
             // if liquidity after listing
@@ -422,13 +429,9 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
             block.timestamp
         );
 
+        _updateHistoryForReward(msg.sender, userDeposit.amount, true);
+
         emit LiquidityRemoved(msg.sender, ownLiquidity, amountToken, amountETH, block.timestamp);
-
-        // transfer reward token
-        // uint256 rewardAmount = getRewardTokenAmount(msg.sender, index);
-        // token.safeTransfer(msg.sender, rewardAmount);
-
-        // emit RewardTransferred(msg.sender, rewardAmount, block.timestamp);
     }
 
     /**
@@ -481,7 +484,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
             // increase total deposit amount
             // totalDeposits += amountETH;
 
-            _updateHistoryForReward(msg.sender, amountETH);
+            _updateHistoryForReward(msg.sender, amountETH, false);
 
             emit LiquidityAdded(msg.sender, liquidity, block.timestamp);
         } catch {
