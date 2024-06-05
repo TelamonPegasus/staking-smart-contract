@@ -403,6 +403,11 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         // emit RewardTransferred(msg.sender, rewardAmount, block.timestamp);
     }
 
+    /**
+     * @notice add liquidity after presale buyers' liquidity was listed
+     *
+     * @param amount sale token amount to add liquidity
+     */
     function addLiquidity(uint256 amount) external payable nonReentrant onlyWhenListed {
         require(msg.value != 0, "Invalid ETH deposit");
         require(amount != 0 , "Invalid token deposit");
@@ -456,6 +461,9 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         }
     }
 
+    /**
+     * @notice claim reward based on the daily reward program
+     */
     function claimReward() external {
         // verify deposit and reward start time
         require(depositStart > 0, "Invalid deposit start time");
