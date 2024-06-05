@@ -21,6 +21,12 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         bool removed;
     }
 
+    struct Checkpoint {
+        uint256 amount;
+        uint256 prev;
+        uint256 next;
+    }
+
     // address of sale token
     IERC20 public token;
     // address of claiming contract
@@ -57,14 +63,13 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     uint256 public startDay;
     uint256 public rewardPeriod;
     uint256 public totalReward;
-    mapping(address => mapping(uint256 => uint256)) public userDailyHistory; // user => day => amount
+    mapping(address => mapping(uint256 => Checkpoint)) public userDailyHistory; // user => day => amount
     mapping(address => uint256) public userLastUpdateDay; // user => day (last day that daily history was updated)
     mapping(address => uint256) public lastRewardClaimDay; // user => day (last day that claimed reward)
     mapping(address => uint256) public lastCheckpointDay; // user => day (last day that was considered in reward calculation for user deposit)
     mapping(address => uint256) public lastTotalCheckpointDay; // user => day (last day that was considered in reward calculation for total deposit)
-    mapping(uint256 => uint256) public dailyTotalHistory; // day => amount
+    mapping(uint256 => Checkpoint) public dailyTotalHistory; // day => amount
     uint256 public lastUpdateDay;
-    uint256 public firstCheckpointDay;
 
     IUniswapV2Pair public pair;
     IUniswapV2Factory public uniswapV2Factory;
@@ -221,9 +226,14 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         startDay = _start / 1 days;
 
         uint256 day = depositStart / 1 days;
+        Checkpoint storage startDayCp = dailyTotalHistory[startDay];
         while (day < startDay) {
-            if (dailyTotalHistory[day] != 0)
-                firstCheckpointDay = day;
+            Checkpoint memory dayCp = dailyTotalHistory[day];
+            if (dailyTotalHistory[day].amount != 0) {
+                startDayCp.amount = dayCp.amount;
+                startDayCp.prev = dayCp.prev;
+                startDayCp.next = dayCp.next;
+            }
 
             ++day;
         }
@@ -283,24 +293,42 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         // get the today number
         uint256 today = block.timestamp / 1 days;
 
-        if (userDailyHistory[user][today] == 0) {
+        Checkpoint storage todayCp = userDailyHistory[user][today];
+        if (todayCp.prev == 0) {
             // if it is the first updating for today, update with last update day's amount
             uint256 userLastDay = userLastUpdateDay[user];
-            userDailyHistory[user][today] = userDailyHistory[user][userLastDay];
+            Checkpoint storage lastCp = userDailyHistory[user][userLastDay];
+            todayCp.amount = lastCp.amount;
+            // update today's previous checkpoint day
+            todayCp.prev = userLastDay;
+            // update last checkpoint day's next checkpoint day
+            lastCp.next = today;
         }
 
-        userDailyHistory[user][today] += amount;
+        todayCp.amount += amount;
         userLastUpdateDay[user] = today;
 
+        Checkpoint storage todayTotalCp = dailyTotalHistory[today];
         if (today != lastUpdateDay) {
-            dailyTotalHistory[today] = dailyTotalHistory[lastUpdateDay];
+            Checkpoint storage lastTotalCp = dailyTotalHistory[lastUpdateDay];
+            todayTotalCp.amount = lastTotalCp.amount + amount;
+            todayTotalCp.prev = lastUpdateDay;
+            lastTotalCp.next = today;
         }
+        todayTotalCp.amount += amount;
+        lastUpdateDay = today;
         // udpate the first checkpoint for reward
         if (today <= startDay) {
-            firstCheckpointDay = today;
+            Checkpoint storage startDayCp = userDailyHistory[user][startDay];
+            startDayCp.amount = todayCp.amount;
+            startDayCp.prev = todayCp.prev;
+            startDayCp.next = 0;
+
+            Checkpoint storage startDayTotalCp = dailyTotalHistory[startDay];
+            startDayTotalCp.amount = todayTotalCp.amount;
+            startDayTotalCp.prev = todayTotalCp.prev;
+            startDayTotalCp.next = todayTotalCp.next;
         }
-        dailyTotalHistory[today] += amount;
-        lastUpdateDay = today;
     }
 
     /**
@@ -471,16 +499,24 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         require(block.timestamp / 1 days > startDay, "Invalid date to claim reward");
 
         // if it is frist claiming, update checkpoint for reward start day
-        if (lastRewardClaimDay[msg.sender] == 0) {
-            uint256 day = depositStart / 1 days;
+        Checkpoint storage startDayCp = userDailyHistory[msg.sender][startDay];
+        if (
+            lastRewardClaimDay[msg.sender] == 0 &&
+            startDayCp.amount != 0
+        ) {
+            uint256 day = 0;
             while (day < startDay) {
-                if (userDailyHistory[msg.sender][day] != 0)
-                    lastCheckpointDay[msg.sender] = day;
+                Checkpoint memory dayCp = userDailyHistory[msg.sender][day];
+                startDayCp.amount = dayCp.amount;
+                startDayCp.prev = dayCp.prev;
+                startDayCp.next = dayCp.next;
 
-                ++day;
+                if (dayCp.next != 0) {
+                    day = dayCp.next;
+                } else {
+                    break;
+                }
             }
-
-            lastTotalCheckpointDay[msg.sender] = firstCheckpointDay;
         }
 
         (
@@ -538,36 +574,37 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         // get the reward end day (the next day of end day, indeed)
         uint256 rewardEndDay = startDay + rewardPeriod;
         // get the last day when user claimed reward
-        uint256 lastClaimDay = (
-            lastRewardClaimDay[user] == 0 ||
-            lastRewardClaimDay[user] < startDay
-        ) ? startDay : lastRewardClaimDay[user];
+        uint256 lastClaimDay = lastRewardClaimDay[user] == 0 ? startDay : lastRewardClaimDay[user];
 
         lastCpDay = lastCheckpointDay[user];
         lastTotalCpDay = lastTotalCheckpointDay[user];
         uint256 endDay = today > rewardEndDay ?  rewardEndDay : today;
         for (uint256 day = lastClaimDay; day < endDay; ++day) {
-            uint256 totalCheckpoint;
-            if (dailyTotalHistory[day] != 0) {
-                totalCheckpoint = dailyTotalHistory[day];
+            uint256 totalCpAmount;
+            Checkpoint memory dayTotalCp = dailyTotalHistory[day];
+            if (dayTotalCp.amount != 0 || dayTotalCp.prev != 0) {
+                totalCpAmount = dayTotalCp.amount;
                 lastTotalCpDay = day;
             } else {
-                totalCheckpoint = dailyTotalHistory[lastTotalCpDay];
+                totalCpAmount = dailyTotalHistory[lastTotalCpDay].amount;
             }
 
-            if (totalCheckpoint == 0) continue;
+            if (totalCpAmount == 0) continue;
 
-            if (userDailyHistory[user][day] != 0) {
+            Checkpoint memory dayCp = userDailyHistory[user][day];
+
+            if (dayCp.amount != 0 || dayCp.prev != 0) {
                 // TODO need to validate if denominator is not zero
-                rewardAmount += dailyReward * userDailyHistory[user][day] / totalCheckpoint;
+                rewardAmount += dailyReward * dayCp.amount / totalCpAmount;
                 lastCpDay = day;
             } else {
                 // TODO consider decreased 0 amount
 
                 // continue if user deposit ETH is zero
-                if (userDailyHistory[user][lastCpDay] == 0) continue;
+                Checkpoint memory userLastDayCp = userDailyHistory[user][lastCpDay];
+                if (userLastDayCp.amount == 0) continue;
 
-                rewardAmount += dailyReward * userDailyHistory[user][lastCpDay] / totalCheckpoint;
+                rewardAmount += dailyReward * userLastDayCp.amount / totalCpAmount;
             }
         }
     }
