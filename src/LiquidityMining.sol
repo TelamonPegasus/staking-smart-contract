@@ -296,7 +296,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         uint256 today = block.timestamp / 1 days;
 
         Checkpoint storage todayCp = userDailyHistory[user][today];
-        if (todayCp.prev == 0) {
+        if (today != userLastUpdateDay[user]) {
             // if it is the first updating for today, update with last update day's amount
             uint256 userLastDay = userLastUpdateDay[user];
             Checkpoint storage lastCp = userDailyHistory[user][userLastDay];
@@ -517,26 +517,8 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         require(startDay > 0, "Invalid reward start time");
         require(block.timestamp / 1 days > startDay, "Invalid date to claim reward");
 
-        // if it is frist claiming, update checkpoint for reward start day
-        Checkpoint storage startDayCp = userDailyHistory[msg.sender][startDay];
-        if (
-            lastRewardClaimDay[msg.sender] == 0 &&
-            startDayCp.amount != 0
-        ) {
-            uint256 day = 0;
-            while (day < startDay) {
-                Checkpoint memory dayCp = userDailyHistory[msg.sender][day];
-                startDayCp.amount = dayCp.amount;
-                startDayCp.prev = dayCp.prev;
-                startDayCp.next = dayCp.next;
-
-                if (dayCp.next != 0) {
-                    day = dayCp.next;
-                } else {
-                    break;
-                }
-            }
-        }
+        // if it is first claiming, update checkpoint for reward start day
+        updateCheckpointStartDay(msg.sender);
 
         (
             uint256 rewardAmount,
@@ -553,7 +535,35 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         lastTotalCheckpointDay[msg.sender] = lastTotalCpDay;
     }
 
-    // deposit tokens for reward program of liquidity mining
+    /**
+     * @notice update start day's checkpoint info for particular user
+     */
+    function updateCheckpointStartDay(address user) public {
+        // if it is first claiming, update checkpoint for reward start day
+        Checkpoint storage startDayCp = userDailyHistory[user][startDay];
+        if (
+            lastRewardClaimDay[user] == 0 &&
+            startDayCp.amount != 0
+        ) {
+            uint256 day = 0;
+            while (day < startDay) {
+                Checkpoint memory dayCp = userDailyHistory[user][day];
+                startDayCp.amount = dayCp.amount;
+                startDayCp.prev = dayCp.prev;
+                startDayCp.next = dayCp.next;
+
+                if (dayCp.next != 0) {
+                    day = dayCp.next;
+                } else {
+                    break;
+                }
+            }
+        }
+    }
+
+    /**
+     * @notice deposit tokens for reward program of liquidity mining
+     */
     // @audit need test
     function depositRewardTokens(uint256 amount) external onlyOwner {
         // verity input argument
@@ -586,6 +596,11 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
 
         // verify input argument
         require(user != address(0), "Invalid user address");
+        if (startDay == 0) { // in the case that start day is not defined yet
+            rewardAmount = 0;
+            lastCpDay = 0;
+            lastTotalCpDay = 0;
+        }
         
         // get the daily rewardable amount
         uint256 dailyReward = totalReward / rewardPeriod;
