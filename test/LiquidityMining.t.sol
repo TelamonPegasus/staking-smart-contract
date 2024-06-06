@@ -253,6 +253,7 @@ contract LiquidityBaseTest is BaseTest {
 
         claiming = new Claiming(address(token));
         claiming.setLiquidityMiningContract(address(liquidityMining));
+        claiming.setClaimStart(block.timestamp + 14 days);
         liquidityMining.setClaimingContract(address(claiming));
 
         deal(address(token), address(claiming), 1000000 ether);
@@ -451,5 +452,59 @@ contract LiquidityRewardTest is LiquidityBaseTest {
         assertEq(amount, 3 ether);
         assertEq(prev, depositStartDay);
         assertEq(next, depositStartDay + 3);
+
+        // 2 weeks later, list liquidity
+        vm.warp(block.timestamp + 11 days);
+        deal(address(token), address(claiming), 1000000 ether);
+        liquidityMining.listLiquidity(address(pair));
+
+        vm.expectRevert("Invalid ETH deposit");
+        vm.prank(alice);
+        liquidityMining.addLiquidity(2000 ether);
+
+        vm.expectRevert("Invalid token deposit");
+        vm.prank(alice);
+        liquidityMining.addLiquidity{value: 0.5 ether}(0);
+
+        // 15th day, alice adds liquidity with 0.5 eth & some tokens
+        vm.startPrank(alice);
+        claiming.claim(alice, 2000 ether);
+        token.approve(address(liquidityMining), 2000 ether);
+        liquidityMining.addLiquidity{value: 0.5 ether}(2000 ether);
+        // checking history
+        (amount, prev, next) = liquidityMining.getUserDailyCheckpoint(alice, depositStartDay + 14);
+        assertEq(amount, 3 ether);
+        assertEq(prev, depositStartDay + 3);
+        assertEq(next, 0);
+        (, , next) = liquidityMining.getUserDailyCheckpoint(alice, depositStartDay + 3);
+        assertEq(next, depositStartDay + 14);
+        (amount, prev, next) = liquidityMining.getTotalDailyCheckpoint(depositStartDay + 14);
+        assertEq(amount, 4 ether);
+        assertEq(prev, depositStartDay + 3);
+        assertEq(next, 0);
+        (amount, prev, next) = liquidityMining.getTotalDailyCheckpoint(depositStartDay + 3);
+        assertEq(amount, 3.5 ether);
+        assertEq(prev, depositStartDay + 1);
+        assertEq(next, depositStartDay + 14);
+
+        // 18th day, bob adds liquidity with 1 eth & some tokens
+        vm.warp(block.timestamp + 3 days);
+        vm.startPrank(bob);
+        claiming.claim(bob, 4000 ether);
+        token.approve(address(liquidityMining), 4000 ether);
+        liquidityMining.addLiquidity{value: 1 ether}(4000 ether);
+        // checking history
+        (amount, prev, next) = liquidityMining.getUserDailyCheckpoint(bob, depositStartDay + 17);
+        assertEq(amount, 2 ether);
+        assertEq(prev, depositStartDay + 1);
+        assertEq(next, 0);
+        (, , next) = liquidityMining.getUserDailyCheckpoint(bob, depositStartDay + 1);
+        assertEq(next, depositStartDay + 17);
+        (amount, prev, next) = liquidityMining.getTotalDailyCheckpoint(depositStartDay + 17);
+        assertEq(amount, 5 ether);
+        assertEq(prev, depositStartDay + 14);
+        assertEq(next, 0);
+        (,, next) = liquidityMining.getTotalDailyCheckpoint(depositStartDay + 14);
+        assertEq(next, depositStartDay + 17);
     }
 }

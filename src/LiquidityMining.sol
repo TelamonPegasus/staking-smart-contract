@@ -443,7 +443,11 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
      * @param amount sale token amount to add liquidity
      */
     // @audit need test
-    function addLiquidity(uint256 amount) external payable nonReentrant onlyWhenListed {
+    function addLiquidity(uint256 amount)external payable nonReentrant onlyWhenListed returns(
+        uint256 aToken,
+        uint256 aETH,
+        uint256 aLiquidity
+    ) {
         require(msg.value != 0, "Invalid ETH deposit");
         require(amount != 0 , "Invalid token deposit");
 
@@ -466,7 +470,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
                 token.safeTransfer(msg.sender, amount - amountToken);
             }
 
-            if (msg.value > amountETH) {
+            if (msg.value > amountETH) { // no need, but for security
                 // refund left ETH to the user back
                 ( bool success, ) = address(msg.sender).call{
                     value: msg.value - amountETH,
@@ -489,6 +493,10 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
             // totalDeposits += amountETH;
 
             _updateHistoryForReward(msg.sender, amountETH, false);
+
+            aToken = amountToken;
+            aETH = amountETH;
+            aLiquidity = liquidity;
 
             emit LiquidityAdded(msg.sender, liquidity, block.timestamp);
         } catch {
