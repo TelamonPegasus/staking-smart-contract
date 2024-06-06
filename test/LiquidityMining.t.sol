@@ -22,6 +22,7 @@ contract BaseTest is Test {
     address public priceFeed = 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419;
     address alice = makeAddr("Alice");
     address bob = makeAddr("Bob");
+    address david = makeAddr("David");
 
     function setUp() public virtual {
         mainnetFork = vm.createSelectFork("mainnet");
@@ -146,6 +147,25 @@ contract SetterTest is BaseTest {
         vm.expectRevert("Invalid reward token amount");
         liquidityMining.setRewardStates(block.timestamp, 70, 0);
     }
+
+    // revert test for claim reward
+    function test_claimRewardRevertZeroDepositStart() public {
+        vm.expectRevert("Invalid deposit start time");
+        liquidityMining.claimReward();
+    }
+
+    function test_claimRewardRevertZeroStartDay() public {
+        liquidityMining.setDepositStart(block.timestamp);
+        vm.expectRevert("Invalid reward start time");
+        liquidityMining.claimReward();
+    }
+
+    function test_claimRewardInvalidDate() public {
+        liquidityMining.setDepositStart(block.timestamp);
+        liquidityMining.setRewardStates(block.timestamp + 1 days, 70, 700 ether);
+        vm.expectRevert("Invalid date to claim reward");
+        liquidityMining.claimReward();
+    }
 }
 
 contract DepositTest is BaseTest {
@@ -259,8 +279,10 @@ contract LiquidityBaseTest is BaseTest {
         deal(address(token), address(claiming), 1000000 ether);
         deal(alice, 10 ether);
         deal(bob, 10 ether);
-        claiming.setClaim(alice, 15000 ether); // 15000 USD
-        claiming.setClaim(bob, 10000 ether); // 10000 USD
+        deal(david, 10 ether);
+        claiming.setClaim(alice, 20000 ether); // 20000 USD
+        claiming.setClaim(bob, 20000 ether); // 20000 USD
+        claiming.setClaim(david, 20000 ether); // 20000 USD
 
         // add initial liquidity with ETH of 200K USD worth
         uniswapRouter = liquidityMining.uniswapV2Router();
@@ -392,8 +414,11 @@ contract LiquidityTest is LiquidityBaseTest {
 }
 
 contract LiquidityRewardTest is LiquidityBaseTest {
+    uint256 depositStartDay;
     function setUp() public override {
         super.setUp();
+
+        depositStartDay = liquidityMining.depositStart() / 1 days;
     }
 
     function test_simpleSetRewardStates() public {
@@ -407,8 +432,6 @@ contract LiquidityRewardTest is LiquidityBaseTest {
     }
 
     function test_depositCheckpoint() public {
-        uint256 depositStartDay = liquidityMining.depositStart() / 1 days;
-
         // 1st day - alice deposits 2 ether
         vm.prank(alice);
         liquidityMining.depositETH{value: 2 ether}(); // about 7500 USD
@@ -565,5 +588,357 @@ contract LiquidityRewardTest is LiquidityBaseTest {
         assertEq(next, 0);
         ( , , next) = liquidityMining.getTotalDailyCheckpoint(depositStartDay + 17);
         assertEq(next, depositStartDay + 21);
+    }
+
+    function test_getClaimingRewards() public {
+        // start rewarding period 7 days later from deposit start time
+        liquidityMining.setRewardStates(block.timestamp + 7 days, 35, 2100 ether); // 60 eth per day
+        deal(address(token), address(this), 2100 ether);
+        token.approve(address(liquidityMining), 2100 ether);
+        liquidityMining.depositRewardTokens(2100 ether);
+
+        uint256 startDay = liquidityMining.startDay();
+        (uint256 amount, uint256 prev, uint256 next) = liquidityMining.getTotalDailyCheckpoint(startDay);
+        assertEq(amount, 0);
+        assertEq(prev, 0);
+        assertEq(next, 0);
+
+        // 1st day, alice deposits 1 eth
+        vm.prank(alice);
+        liquidityMining.depositETH{value: 1 ether}(); // about 4000 USD
+
+        (amount, prev, next) = liquidityMining.getUserDailyCheckpoint(alice, startDay);
+        assertEq(amount, 1 ether);
+        assertEq(prev, 0);
+        assertEq(next, 0);
+        (amount, prev, next) = liquidityMining.getTotalDailyCheckpoint(startDay);
+        assertEq(amount, 1 ether);
+        assertEq(prev, 0);
+        assertEq(next, 0);
+
+        (
+            uint256 rewardAmount,
+            uint256 lastCpDay,
+            uint256 lastTotalCpDay
+        ) = liquidityMining.getRewardTokenAmount(alice);
+        assertEq(rewardAmount, 0);
+        assertEq(lastCpDay, 0);
+        assertEq(lastTotalCpDay, 0);
+
+        // 3rd day
+        vm.warp(block.timestamp + 2 days);
+        // bob deposits 0.5 eth twice
+        vm.prank(bob);
+        liquidityMining.depositETH{value: 0.5 ether}(); // about 2000 USD
+
+        (amount, prev, next) = liquidityMining.getUserDailyCheckpoint(bob, startDay);
+        assertEq(amount, 0.5 ether);
+        assertEq(prev, 0);
+        assertEq(next, 0);
+        (amount, prev, next) = liquidityMining.getTotalDailyCheckpoint(startDay);
+        assertEq(amount, 1.5 ether);
+        assertEq(prev, depositStartDay);
+        assertEq(next, 0);
+
+        vm.prank(bob);
+        liquidityMining.depositETH{value: 0.5 ether}(); // about 2000 USD
+
+        (amount, prev, next) = liquidityMining.getUserDailyCheckpoint(bob, startDay);
+        assertEq(amount, 1 ether);
+        assertEq(prev, 0);
+        assertEq(next, 0);
+        (amount, prev, next) = liquidityMining.getTotalDailyCheckpoint(startDay);
+        assertEq(amount, 2 ether);
+        assertEq(prev, depositStartDay);
+        assertEq(next, 0);
+
+        (amount, prev, next) = liquidityMining.getUserDailyCheckpoint(bob, depositStartDay + 2);
+        assertEq(amount, 1 ether);
+        assertEq(prev, 0);
+        assertEq(next, 0);
+        (amount, prev, next) = liquidityMining.getTotalDailyCheckpoint(depositStartDay + 2);
+        assertEq(amount, 2 ether);
+        assertEq(prev, depositStartDay);
+        assertEq(next, 0);
+
+        (
+            rewardAmount,
+            lastCpDay,
+            lastTotalCpDay
+        ) = liquidityMining.getRewardTokenAmount(bob);
+        assertEq(rewardAmount, 0);
+        assertEq(lastCpDay, 0);
+        assertEq(lastTotalCpDay, 0);
+
+        // 7th day
+        vm.warp(block.timestamp + 4 days);
+        // alice deposits 1 eth again
+        vm.prank(alice);
+        liquidityMining.depositETH{value: 1 ether}(); // about 4000 USD
+
+        (amount, prev, next) = liquidityMining.getUserDailyCheckpoint(alice, startDay);
+        assertEq(amount, 2 ether);
+        assertEq(prev, depositStartDay);
+        assertEq(next, 0);
+        (amount, prev, next) = liquidityMining.getTotalDailyCheckpoint(startDay);
+        assertEq(amount, 3 ether);
+        assertEq(prev, depositStartDay + 2);
+        assertEq(next, 0);
+
+        (amount, prev, next) = liquidityMining.getUserDailyCheckpoint(alice, depositStartDay + 6);
+        assertEq(amount, 2 ether);
+        assertEq(prev, depositStartDay);
+        assertEq(next, 0);
+        (amount, prev, next) = liquidityMining.getTotalDailyCheckpoint(depositStartDay + 6);
+        assertEq(amount, 3 ether);
+        assertEq(prev, depositStartDay + 2);
+        assertEq(next, 0);
+
+        (
+            rewardAmount,
+            lastCpDay,
+            lastTotalCpDay
+        ) = liquidityMining.getRewardTokenAmount(alice);
+        assertEq(rewardAmount, 0);
+        assertEq(lastCpDay, 0);
+        assertEq(lastTotalCpDay, 0);
+
+        // 9th day
+        vm.warp(block.timestamp + 2 days);
+        // alice deposits 1 eth again
+        vm.prank(alice);
+        liquidityMining.depositETH{value: 1 ether}();
+
+        (amount, prev, next) = liquidityMining.getUserDailyCheckpoint(alice, startDay);
+        assertEq(amount, 2 ether);
+        assertEq(prev, depositStartDay);
+        assertEq(next, 0);
+        (amount, prev, next) = liquidityMining.getTotalDailyCheckpoint(startDay);
+        assertEq(amount, 3 ether);
+        assertEq(prev, depositStartDay + 2);
+        assertEq(next, 0);
+
+        (amount, prev, next) = liquidityMining.getUserDailyCheckpoint(alice, depositStartDay + 8);
+        assertEq(amount, 3 ether);
+        assertEq(prev, depositStartDay + 6);
+        assertEq(next, 0);
+        (amount, prev, next) = liquidityMining.getTotalDailyCheckpoint(depositStartDay + 8);
+        assertEq(amount, 4 ether);
+        assertEq(prev, depositStartDay + 6);
+        assertEq(next, 0);
+
+        (amount, prev, next) = liquidityMining.getUserDailyCheckpoint(alice, depositStartDay + 6);
+        assertEq(amount, 2 ether);
+        assertEq(prev, depositStartDay);
+        assertEq(next, depositStartDay + 8);
+        (amount, prev, next) = liquidityMining.getTotalDailyCheckpoint(depositStartDay + 6);
+        assertEq(amount, 3 ether);
+        assertEq(prev, depositStartDay + 2);
+        assertEq(next, depositStartDay + 8);
+
+        (
+            rewardAmount,
+            lastCpDay,
+            lastTotalCpDay
+        ) = liquidityMining.getRewardTokenAmount(alice);
+        assertEq(rewardAmount, 40 ether);
+        assertEq(lastCpDay, depositStartDay + 7);
+        assertEq(lastTotalCpDay, depositStartDay + 7);
+        (
+            rewardAmount,
+            lastCpDay,
+            lastTotalCpDay
+        ) = liquidityMining.getRewardTokenAmount(bob);
+        assertEq(rewardAmount, 20 ether);
+        assertEq(lastCpDay, depositStartDay + 7);
+        assertEq(lastTotalCpDay, depositStartDay + 7);
+
+        // 10th day
+        vm.warp(block.timestamp + 1 days);
+        // reward calculation for 1st ~ 9th day
+        (
+            rewardAmount,
+            lastCpDay,
+            lastTotalCpDay
+        ) = liquidityMining.getRewardTokenAmount(alice);
+        assertEq(rewardAmount, 85 ether); // + 45 ether
+        assertEq(lastCpDay, depositStartDay + 8);
+        assertEq(lastTotalCpDay, depositStartDay + 8);
+        (
+            rewardAmount,
+            lastCpDay,
+            lastTotalCpDay
+        ) = liquidityMining.getRewardTokenAmount(bob);
+        assertEq(rewardAmount, 35 ether); // + 15 ether
+        assertEq(lastCpDay, depositStartDay + 7);
+        assertEq(lastTotalCpDay, depositStartDay + 8);
+        // alice claims reward
+        uint256 prevBalance = token.balanceOf(alice);
+        vm.prank(alice);
+        liquidityMining.claimReward();
+        assertEq(token.balanceOf(alice), prevBalance + 85 ether);
+
+        // 11th day
+        vm.warp(block.timestamp + 1 days);
+        // reward calculation for 1st ~ 10th days
+        (
+            rewardAmount,
+            lastCpDay,
+            lastTotalCpDay
+        ) = liquidityMining.getRewardTokenAmount(alice);
+        assertEq(rewardAmount, 45 ether); // + 45 ether
+        assertEq(lastCpDay, depositStartDay + 8);
+        assertEq(lastTotalCpDay, depositStartDay + 8);
+        (
+            rewardAmount,
+            lastCpDay,
+            lastTotalCpDay
+        ) = liquidityMining.getRewardTokenAmount(bob);
+        assertEq(rewardAmount, 50 ether); // + 15 ether
+        assertEq(lastCpDay, depositStartDay + 7);
+        assertEq(lastTotalCpDay, depositStartDay + 8);
+        // bob deposits 0.5 ether
+        vm.prank(bob);
+        liquidityMining.depositETH{value: 0.5 ether}();
+
+        (amount, prev, next) = liquidityMining.getUserDailyCheckpoint(bob, depositStartDay + 10);
+        assertEq(amount, 1.5 ether);
+        assertEq(prev, depositStartDay + 2);
+        assertEq(next, 0);
+        (amount, prev, next) = liquidityMining.getTotalDailyCheckpoint(depositStartDay + 10);
+        assertEq(amount, 4.5 ether);
+        assertEq(prev, depositStartDay + 8);
+        assertEq(next, 0);
+        // bob claims reward
+        prevBalance = token.balanceOf(bob);
+        vm.prank(bob);
+        liquidityMining.claimReward();
+        assertEq(token.balanceOf(bob), prevBalance + 50 ether);
+
+        // 12th days
+        vm.warp(block.timestamp + 1 days);
+        // reward calculation for 1st ~ 11th days
+        (
+            rewardAmount,
+            lastCpDay,
+            lastTotalCpDay
+        ) = liquidityMining.getRewardTokenAmount(alice);
+        assertEq(rewardAmount, 85 ether); // + 40 ether
+        assertEq(lastCpDay, depositStartDay + 8);
+        assertEq(lastTotalCpDay, depositStartDay + 10);
+        (
+            rewardAmount,
+            lastCpDay,
+            lastTotalCpDay
+        ) = liquidityMining.getRewardTokenAmount(bob);
+        assertEq(rewardAmount, 20 ether); // + 20 ether
+        assertEq(lastCpDay, depositStartDay + 10);
+        assertEq(lastTotalCpDay, depositStartDay + 10);
+
+        // 14th day
+        vm.warp(block.timestamp + 2 days);
+        // david deposits 0.5 ether
+        vm.prank(david);
+        liquidityMining.depositETH{value: 0.5 ether}();
+
+        // 15th day, list liquidity
+        vm.warp(block.timestamp + 1 days);
+        // reward for 1st ~ 14th (total: 5, alice: 3, bob: 1.5, david: 0.5)
+        ( rewardAmount, , ) = liquidityMining.getRewardTokenAmount(alice);
+        assertEq(rewardAmount, 201 ether); // + 36 ether
+        ( rewardAmount, , ) = liquidityMining.getRewardTokenAmount(bob);
+        assertEq(rewardAmount, 78 ether); // + 18 ether
+        ( rewardAmount, , ) = liquidityMining.getRewardTokenAmount(david);
+        assertEq(rewardAmount, 6 ether); // + 6 ether
+        deal(address(token), address(claiming), 1000000 ether);
+        liquidityMining.listLiquidity(address(pair));
+        // alice claims reward
+        prevBalance = token.balanceOf(alice);
+        vm.prank(alice);
+        liquidityMining.claimReward();
+        assertEq(token.balanceOf(alice), prevBalance + 201 ether);
+
+        // 18th day
+        vm.warp(block.timestamp + 3 days);
+        // bob add liquidity with 0.5 ether, david add liquidity with 0.5 ether
+        deal(address(token), bob, 2000 ether);
+        deal(address(token), david, 2000 ether);
+        vm.startPrank(bob);
+        token.approve(address(liquidityMining), 2000 ether);
+        liquidityMining.addLiquidity{value: 0.5 ether}(2000 ether);
+        vm.stopPrank();
+        vm.startPrank(david);
+        token.approve(address(liquidityMining), 2000 ether);
+        liquidityMining.addLiquidity{value: 0.5 ether}(2000 ether);
+        vm.stopPrank();
+
+        // 22th day
+        vm.warp(block.timestamp + 4 days);
+        // reward for 1st ~ 21th (total: 6, alice: 3, bob: 2, david: 1)
+        ( rewardAmount, , ) = liquidityMining.getRewardTokenAmount(alice);
+        assertEq(rewardAmount, 228 ether); // + 30 ether
+        ( rewardAmount, , ) = liquidityMining.getRewardTokenAmount(bob);
+        assertEq(rewardAmount, 212 ether); // + 20 ether
+        ( rewardAmount, , ) = liquidityMining.getRewardTokenAmount(david);
+        assertEq(rewardAmount, 64 ether); // + 10 ether
+        // bob removes his 2nd, 4th liquidity
+        vm.startPrank(bob);
+        liquidityMining.removeLiquidity(1);
+        liquidityMining.removeLiquidity(3);
+        vm.stopPrank();
+
+        // 24th day
+        vm.warp(block.timestamp + 2 days);
+        // reward for 1st ~ 23th (total: 5, alice: 3, bob: 1, david: 1)
+        ( rewardAmount, , ) = liquidityMining.getRewardTokenAmount(alice);
+        assertEq(rewardAmount, 300 ether); // + 36 ether
+        ( rewardAmount, , ) = liquidityMining.getRewardTokenAmount(bob);
+        assertEq(rewardAmount, 236 ether); // + 12 ether
+        ( rewardAmount, , ) = liquidityMining.getRewardTokenAmount(david);
+        assertEq(rewardAmount, 88 ether); // + 12 ether
+        // bob removes his 1st, 3rd liquidity, claim rewards
+        vm.startPrank(bob);
+        liquidityMining.removeLiquidity(0);
+        liquidityMining.removeLiquidity(2);
+        prevBalance = token.balanceOf(bob);
+        liquidityMining.claimReward();
+        assertEq(token.balanceOf(bob), prevBalance + 236 ether);
+        vm.stopPrank();
+
+        // 26th day
+        vm.warp(block.timestamp + 2 days);
+        // reward for 1st ~ 25th (total: 4, alice: 3, bob: 0, david: 1)
+        ( rewardAmount, , ) = liquidityMining.getRewardTokenAmount(alice);
+        assertEq(rewardAmount, 390 ether); // + 45 ether
+        ( rewardAmount, , ) = liquidityMining.getRewardTokenAmount(bob);
+        assertEq(rewardAmount, 0 ether); // + 0 ether
+        ( rewardAmount, , ) = liquidityMining.getRewardTokenAmount(david);
+        assertEq(rewardAmount, 118 ether); // + 15 ether
+        // bob adds liquidity with 1 ether again
+        deal(address(token), bob, 4000 ether);
+        vm.startPrank(bob);
+        token.approve(address(liquidityMining), 4000 ether);
+        liquidityMining.addLiquidity{value: 1 ether}(4000 ether);
+        vm.stopPrank();
+
+        // 27th day
+        vm.warp(block.timestamp + 1 days);
+        // reward for 1st ~ 26th (total: 5, alice: 3, bob: 1, david: 1)
+        ( rewardAmount, , ) = liquidityMining.getRewardTokenAmount(alice);
+        assertEq(rewardAmount, 426 ether); // + 36 ether
+        ( rewardAmount, , ) = liquidityMining.getRewardTokenAmount(bob);
+        assertEq(rewardAmount, 12 ether); // + 12 ether
+        ( rewardAmount, , ) = liquidityMining.getRewardTokenAmount(david);
+        assertEq(rewardAmount, 130 ether); // + 12 ether
+
+        // 45th day (reward was ended at 42th day, period: 8th ~ 42th)
+        vm.warp(block.timestamp + 18 days);
+        // reward for 1st ~ 42th (total: 5, alice: 3, bob: 1, david: 1)
+        ( rewardAmount, , ) = liquidityMining.getRewardTokenAmount(alice);
+        assertEq(rewardAmount, 1002 ether); // + 36 ether
+        ( rewardAmount, , ) = liquidityMining.getRewardTokenAmount(bob);
+        assertEq(rewardAmount, 204 ether); // + 12 ether
+        ( rewardAmount, , ) = liquidityMining.getRewardTokenAmount(david);
+        assertEq(rewardAmount, 322 ether); // + 12 ether
     }
 }
