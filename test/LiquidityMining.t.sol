@@ -406,7 +406,7 @@ contract LiquidityRewardTest is LiquidityBaseTest {
         assertEq(3500 ether, liquidityMining.totalReward());
     }
 
-    function test_depositCheckpointBeforeListing() public {
+    function test_depositCheckpoint() public {
         uint256 depositStartDay = liquidityMining.depositStart() / 1 days;
 
         // 1st day - alice deposits 2 ether
@@ -442,7 +442,7 @@ contract LiquidityRewardTest is LiquidityBaseTest {
         assertEq(amount, 2.5 ether);
         assertEq(prev, depositStartDay);
         assertEq(next, 0);
-        (, , next) = liquidityMining.getUserDailyCheckpoint(alice, depositStartDay);
+        ( , , next) = liquidityMining.getUserDailyCheckpoint(alice, depositStartDay);
         assertEq(next, depositStartDay + 3);
         (amount, prev, next) = liquidityMining.getTotalDailyCheckpoint(depositStartDay + 3);
         assertEq(amount, 3.5 ether);
@@ -471,12 +471,13 @@ contract LiquidityRewardTest is LiquidityBaseTest {
         claiming.claim(alice, 2000 ether);
         token.approve(address(liquidityMining), 2000 ether);
         liquidityMining.addLiquidity{value: 0.5 ether}(2000 ether);
+        vm.stopPrank();
         // checking history
         (amount, prev, next) = liquidityMining.getUserDailyCheckpoint(alice, depositStartDay + 14);
         assertEq(amount, 3 ether);
         assertEq(prev, depositStartDay + 3);
         assertEq(next, 0);
-        (, , next) = liquidityMining.getUserDailyCheckpoint(alice, depositStartDay + 3);
+        ( , , next) = liquidityMining.getUserDailyCheckpoint(alice, depositStartDay + 3);
         assertEq(next, depositStartDay + 14);
         (amount, prev, next) = liquidityMining.getTotalDailyCheckpoint(depositStartDay + 14);
         assertEq(amount, 4 ether);
@@ -493,18 +494,76 @@ contract LiquidityRewardTest is LiquidityBaseTest {
         claiming.claim(bob, 4000 ether);
         token.approve(address(liquidityMining), 4000 ether);
         liquidityMining.addLiquidity{value: 1 ether}(4000 ether);
+        vm.stopPrank();
         // checking history
         (amount, prev, next) = liquidityMining.getUserDailyCheckpoint(bob, depositStartDay + 17);
         assertEq(amount, 2 ether);
         assertEq(prev, depositStartDay + 1);
         assertEq(next, 0);
-        (, , next) = liquidityMining.getUserDailyCheckpoint(bob, depositStartDay + 1);
+        ( , , next) = liquidityMining.getUserDailyCheckpoint(bob, depositStartDay + 1);
         assertEq(next, depositStartDay + 17);
         (amount, prev, next) = liquidityMining.getTotalDailyCheckpoint(depositStartDay + 17);
         assertEq(amount, 5 ether);
         assertEq(prev, depositStartDay + 14);
         assertEq(next, 0);
-        (,, next) = liquidityMining.getTotalDailyCheckpoint(depositStartDay + 14);
+        ( , , next) = liquidityMining.getTotalDailyCheckpoint(depositStartDay + 14);
         assertEq(next, depositStartDay + 17);
+
+        // removing liquidity
+        // 22th day, alice removes 2nd deposited liquidity, bob removes 2nd deposited liquidity, then alice removes 3nd deposited liquidited again
+        vm.warp(block.timestamp + 4 days);
+        vm.assertEq(liquidityMining.getUserTotalDeposit(alice), 3 ether);
+        vm.prank(alice);
+        liquidityMining.removeLiquidity(1);
+        vm.assertEq(liquidityMining.getUserTotalDeposit(alice), 2.5 ether);
+        // checking history
+        (amount, prev, next) = liquidityMining.getUserDailyCheckpoint(alice, depositStartDay + 21);
+        assertEq(amount, 2.5 ether);
+        assertEq(prev, depositStartDay + 14);
+        assertEq(next, 0);
+        ( , , next) = liquidityMining.getUserDailyCheckpoint(alice, depositStartDay + 14);
+        assertEq(next, depositStartDay + 21);
+        (amount, prev, next) = liquidityMining.getTotalDailyCheckpoint(depositStartDay + 21);
+        assertEq(amount, 4.5 ether);
+        assertEq(prev, depositStartDay + 17);
+        assertEq(next, 0);
+        ( , , next) = liquidityMining.getTotalDailyCheckpoint(depositStartDay + 17);
+        assertEq(next, depositStartDay + 21);
+
+        vm.assertEq(liquidityMining.getUserTotalDeposit(bob), 2 ether);
+        vm.prank(bob);
+        liquidityMining.removeLiquidity(1);
+        vm.assertEq(liquidityMining.getUserTotalDeposit(bob), 1 ether);
+        // checking history
+        (amount, prev, next) = liquidityMining.getUserDailyCheckpoint(bob, depositStartDay + 21);
+        assertEq(amount, 1 ether);
+        assertEq(prev, depositStartDay + 17);
+        assertEq(next, 0);
+        ( , , next) = liquidityMining.getUserDailyCheckpoint(bob, depositStartDay + 17);
+        assertEq(next, depositStartDay + 21);
+        (amount, prev, next) = liquidityMining.getTotalDailyCheckpoint(depositStartDay + 21);
+        assertEq(amount, 3.5 ether);
+        assertEq(prev, depositStartDay + 17);
+        assertEq(next, 0);
+        ( , , next) = liquidityMining.getTotalDailyCheckpoint(depositStartDay + 17);
+        assertEq(next, depositStartDay + 21);
+
+        vm.assertEq(liquidityMining.getUserTotalDeposit(alice), 2.5 ether);
+        vm.prank(alice);
+        liquidityMining.removeLiquidity(2);
+        vm.assertEq(liquidityMining.getUserTotalDeposit(alice), 2 ether);
+        // checking history
+        (amount, prev, next) = liquidityMining.getUserDailyCheckpoint(alice, depositStartDay + 21);
+        assertEq(amount, 2 ether);
+        assertEq(prev, depositStartDay + 14);
+        assertEq(next, 0);
+        ( , , next) = liquidityMining.getUserDailyCheckpoint(alice, depositStartDay + 14);
+        assertEq(next, depositStartDay + 21);
+        (amount, prev, next) = liquidityMining.getTotalDailyCheckpoint(depositStartDay + 21);
+        assertEq(amount, 3 ether);
+        assertEq(prev, depositStartDay + 17);
+        assertEq(next, 0);
+        ( , , next) = liquidityMining.getTotalDailyCheckpoint(depositStartDay + 17);
+        assertEq(next, depositStartDay + 21);
     }
 }
