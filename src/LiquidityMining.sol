@@ -394,7 +394,10 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
      * @param index index of the deposit array to get reward
      */
     // @audit need test
-    function removeLiquidity(uint256 index) external nonReentrant onlyWhenListed {
+    function removeLiquidity(uint256 index) external nonReentrant onlyWhenListed returns(
+        uint256 amountToken,
+        uint256 amountETH
+    ){
         // verify 1 week after listed
         require(block.timestamp >= listedTime + 7 days, "Cannot remove liquidity until 7 days after listing");
         // verify input argument
@@ -423,7 +426,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         pair.approve(address(uniswapV2Router), ownLiquidity);
         
         // remove liquidity and transfer tokens to caller
-        (uint256 amountToken, uint256 amountETH) = uniswapV2Router.removeLiquidityETH(
+        (amountToken, amountETH) = uniswapV2Router.removeLiquidityETH(
             address(token),
             ownLiquidity,
             100,
