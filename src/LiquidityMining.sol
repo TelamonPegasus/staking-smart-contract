@@ -212,6 +212,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
      * @param _start reward program start time in timestamp
      * @param _total total reward token amount
      */
+    // @audit need test
     function setRewardStates(uint256 _start, uint256 _period, uint256 _total) external onlyOwner {
         // verify setting of deposit start date
         require(depositStart != 0, "Deposit start time should be set");
@@ -289,6 +290,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         emit Deposited(msg.sender, msg.value, block.timestamp);
     }
 
+    // @audit need test
     function _updateHistoryForReward(address user, uint256 amount, bool isRemove) private {
         // get the today number
         uint256 today = block.timestamp / 1 days;
@@ -308,7 +310,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         Checkpoint storage todayTotalCp = dailyTotalHistory[today];
         if (today != lastUpdateDay) {
             Checkpoint storage lastTotalCp = dailyTotalHistory[lastUpdateDay];
-            todayTotalCp.amount = lastTotalCp.amount + amount;
+            todayTotalCp.amount = lastTotalCp.amount;
             todayTotalCp.prev = lastUpdateDay;
             lastTotalCp.next = today;
         }
@@ -391,6 +393,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
      *
      * @param index index of the deposit array to get reward
      */
+    // @audit need test
     function removeLiquidity(uint256 index) external nonReentrant onlyWhenListed {
         // verify 1 week after listed
         require(block.timestamp >= listedTime + 7 days, "Cannot remove liquidity until 7 days after listing");
@@ -439,6 +442,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
      *
      * @param amount sale token amount to add liquidity
      */
+    // @audit need test
     function addLiquidity(uint256 amount) external payable nonReentrant onlyWhenListed {
         require(msg.value != 0, "Invalid ETH deposit");
         require(amount != 0 , "Invalid token deposit");
@@ -495,6 +499,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     /**
      * @notice claim reward based on the daily reward program
      */
+    // @audit need test
     function claimReward() external {
         // verify deposit and reward start time
         require(depositStart > 0, "Invalid deposit start time");
@@ -538,6 +543,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     }
 
     // deposit tokens for reward program of liquidity mining
+    // @audit need test
     function depositRewardTokens(uint256 amount) external onlyOwner {
         // verity input argument
         require(amount != 0, "Invalid token amount");
@@ -559,6 +565,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
      *
      * TODO should consider mining is performed?
      */
+    // @audit need test
     function getRewardTokenAmount(address user) public view returns(
         uint256 rewardAmount,
         uint256 lastCpDay,
@@ -640,6 +647,37 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
      */
     function getUserTotalDeposit(address user) public view returns(uint256) {
         return userTotalDeposits[user];
+    }
+
+    /**
+     * @notice get user's daily checkpoint history
+     */
+    function getUserDailyCheckpoint(
+        address user,
+        uint256 day
+    ) public view returns (
+        uint256 amount,
+        uint256 prev, 
+        uint256 next
+    ) {
+        Checkpoint memory cp = userDailyHistory[user][day];
+        amount = cp.amount;
+        prev = cp.prev;
+        next = cp.next;
+    }
+
+    /**
+     * @notice get total daily checkpoint history
+     */
+    function getTotalDailyCheckpoint(uint256 day) public view returns(
+        uint256 amount,
+        uint256 prev,
+        uint256 next
+    ) {
+        Checkpoint memory cp = dailyTotalHistory[day];
+        amount = cp.amount;
+        prev = cp.prev;
+        next = cp.next;
     }
 
     /**

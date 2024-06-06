@@ -395,7 +395,61 @@ contract LiquidityRewardTest is LiquidityBaseTest {
         super.setUp();
     }
 
-    function test_claimRewards() public {
+    function test_simpleSetRewardStates() public {
+        liquidityMining.setRewardStates(block.timestamp, 35, 3500 ether);
+        uint256 startDay = liquidityMining.startDay();
+        assertEq(startDay, block.timestamp / 1 days);
+        (uint256 amount, ,) = liquidityMining.getTotalDailyCheckpoint(startDay);
+        assertEq(amount, 0);
+        assertEq(35, liquidityMining.rewardPeriod());
+        assertEq(3500 ether, liquidityMining.totalReward());
+    }
 
+    function test_depositCheckpointBeforeListing() public {
+        uint256 depositStartDay = liquidityMining.depositStart() / 1 days;
+
+        // 1st day - alice deposits 2 ether
+        vm.prank(alice);
+        liquidityMining.depositETH{value: 2 ether}(); // about 7500 USD
+        (uint256 amount, uint256 prev, uint256 next) = liquidityMining.getUserDailyCheckpoint(alice, depositStartDay);
+        assertEq(amount, 2 ether);
+        assertEq(prev, 0);
+        assertEq(next, 0);
+        (amount, prev, next) = liquidityMining.getTotalDailyCheckpoint(depositStartDay);
+        assertEq(amount, 2 ether);
+        assertEq(prev, 0);
+        assertEq(next, 0);
+
+        // 2nd day - bob deposits 1 ether
+        vm.warp(block.timestamp + 1 days);
+        vm.prank(bob);
+        liquidityMining.depositETH{value: 1 ether}(); // under 4000 USD
+        (amount, prev, next) = liquidityMining.getUserDailyCheckpoint(bob, depositStartDay + 1);
+        assertEq(amount, 1 ether);
+        assertEq(prev, 0);
+        assertEq(next, 0);
+        (amount, prev, next) = liquidityMining.getTotalDailyCheckpoint(depositStartDay + 1);
+        assertEq(amount, 3 ether);
+        assertEq(prev, depositStartDay);
+        assertEq(next, 0);
+
+        // 4th day - alice deposits 0.5 ether again
+        vm.warp(block.timestamp + 2 days);
+        vm.prank(alice);
+        liquidityMining.depositETH{value: 0.5 ether}(); // under 2000 USD
+        (amount, prev, next) = liquidityMining.getUserDailyCheckpoint(alice, depositStartDay + 3);
+        assertEq(amount, 2.5 ether);
+        assertEq(prev, depositStartDay);
+        assertEq(next, 0);
+        (, , next) = liquidityMining.getUserDailyCheckpoint(alice, depositStartDay);
+        assertEq(next, depositStartDay + 3);
+        (amount, prev, next) = liquidityMining.getTotalDailyCheckpoint(depositStartDay + 3);
+        assertEq(amount, 3.5 ether);
+        assertEq(prev, depositStartDay + 1);
+        assertEq(next, 0);
+        (amount, prev, next) = liquidityMining.getTotalDailyCheckpoint(depositStartDay + 1);
+        assertEq(amount, 3 ether);
+        assertEq(prev, depositStartDay);
+        assertEq(next, depositStartDay + 3);
     }
 }
