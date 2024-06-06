@@ -49,7 +49,7 @@ contract Claiming is Ownable {
 
     modifier whenClaimStarted() {
         // verify the claiming was started
-        require(claimStart != 0 && block.timestamp > claimStart, "Claiming is not able now.");
+        require(claimStart != 0 && block.timestamp >= claimStart, "Claiming is not able now.");
         
         // execute the rest of the function
         _;
