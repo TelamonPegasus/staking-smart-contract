@@ -941,4 +941,49 @@ contract LiquidityRewardTest is LiquidityBaseTest {
         ( rewardAmount, , ) = liquidityMining.getRewardTokenAmount(david);
         assertEq(rewardAmount, 322 ether); // + 12 ether
     }
+
+    function test_setRewardStatesAfterDeposit() public {
+        // 1st day
+        // alice deposits 1 ether
+        vm.prank(alice);
+        liquidityMining.depositETH{value: 1 ether}();
+
+        // 3rd day
+        vm.warp(block.timestamp + 2 days);
+        // bob deposits 0.5 ether
+        vm.prank(bob);
+        liquidityMining.depositETH{value: 0.5 ether}();
+
+        // 9th day
+        vm.warp(block.timestamp + 6 days);
+        // set reward states
+        liquidityMining.setRewardStates(liquidityMining.depositStart() + 7 days, 35, 2100 ether);
+        deal(address(token), address(this), 2100 ether);
+        token.approve(address(liquidityMining), 2100 ether);
+        liquidityMining.depositRewardTokens(2100 ether);
+        // reward for 8th
+        ( uint256 rewardAmount, , ) = liquidityMining.getRewardTokenAmount(alice);
+        assertEq(rewardAmount, 0);
+        ( rewardAmount, , ) = liquidityMining.getRewardTokenAmount(bob);
+        assertEq(rewardAmount, 0);
+        // update startday's checkpoint for users
+        liquidityMining.updateCheckpointStartDay(alice);
+        ( rewardAmount, , ) = liquidityMining.getRewardTokenAmount(alice);
+        assertEq(rewardAmount, 40 ether);
+        // bob deposits 0.5 ether
+        vm.prank(bob);
+        liquidityMining.depositETH{value: 0.5 ether}();
+
+        // 10th day
+        vm.warp(block.timestamp + 1 days);
+        // reward for 8th ~ 9th
+        ( rewardAmount, , ) = liquidityMining.getRewardTokenAmount(bob);
+        assertEq(rewardAmount, 30 ether);
+        // claim reward
+        vm.startPrank(bob);
+        uint256 prevBalance = token.balanceOf(bob);
+        liquidityMining.claimReward();
+        assertEq(token.balanceOf(bob), prevBalance + 50 ether);
+        vm.stopPrank();
+    }
 }

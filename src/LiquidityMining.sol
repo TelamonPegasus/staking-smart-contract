@@ -543,10 +543,10 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         Checkpoint storage startDayCp = userDailyHistory[user][startDay];
         if (
             lastRewardClaimDay[user] == 0 &&
-            startDayCp.amount != 0
+            startDayCp.amount == 0
         ) {
             uint256 day = 0;
-            while (day < startDay) {
+            while (day <= startDay) {
                 Checkpoint memory dayCp = userDailyHistory[user][day];
                 startDayCp.amount = dayCp.amount;
                 startDayCp.prev = dayCp.prev;
