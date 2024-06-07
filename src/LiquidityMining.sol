@@ -580,6 +580,16 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     *****************************************************/
 
     /**
+     * @notice How many deposits a particular address has done
+     *
+     * @param user an address to query number of times deposited
+     * @return number of times a particular address has deposited
+     */
+    function numDepoists(address user) public view returns(uint256) {
+        return userDeposits[user].length;
+    }
+
+    /**
      * @notice Get the reward token amount based on the reward program
      *
      * @param user address of user to get the reward
@@ -643,6 +653,28 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
                 rewardAmount += dailyReward * userLastDayCp.amount / totalCpAmount;
             }
         }
+    }
+
+    /**
+     * @notice Get the info of a particular staking
+     * 
+     * @dev Only owner can call this function; should check non-zero address
+     * 
+     * @param staker address of user to get the staking info
+     */
+    function getUserDepositsArray(address user) public view returns(UserDeposit[] memory) {
+        uint256 length = numDepoists(user);
+        UserDeposit[] memory userDepositArray = new UserDeposit[](length);
+
+        for (uint256 i = 0; i < length;) {
+            userDepositArray[i] = userDeposits[user][i];
+
+            unchecked {
+                ++i;
+            }
+        }
+
+        return userDepositArray;
     }
 
     /**
