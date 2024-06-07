@@ -309,8 +309,6 @@ contract Staking is Ownable {
     /**
      * @notice Get the info of a particular staking
      * 
-     * @dev Only owner can call this function; should check non-zero address
-     * 
      * @param staker address of user to get the staking info
      * @param index index of staking to get the detail
      */
@@ -329,8 +327,6 @@ contract Staking is Ownable {
 
     /**
      * @notice Get the info of a particular staking
-     * 
-     * @dev Only owner can call this function; should check non-zero address
      * 
      * @param staker address of user to get the staking info
      */

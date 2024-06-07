@@ -656,11 +656,9 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Get the info of a particular staking
+     * @notice Get the info of a particular deposits
      * 
-     * @dev Only owner can call this function; should check non-zero address
-     * 
-     * @param staker address of user to get the staking info
+     * @param user address of user to get the deposits info
      */
     function getUserDepositsArray(address user) public view returns(UserDeposit[] memory) {
         uint256 length = numDepoists(user);
