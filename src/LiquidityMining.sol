@@ -48,8 +48,6 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     uint256 public DENOMINATOR = 10_000;
     // minimum ETH amount to deposit
     uint256 public ALLOWED_MINIMUM_DEPOSIT;
-    // minimum period to lock ETH;
-    uint256 public MININUM_PERIOD_LOCK_ETH;
     // WETH token address
     address public WETH;
     // total deposit ETH
@@ -105,7 +103,13 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         _;
     }
 
-    constructor(address _token, address _chainlinkETHUSDAddress) Ownable(msg.sender) {
+    constructor(
+        address _token,
+        address _chainlinkETHUSDAddress,
+        address _uniswapV2Factory, // 0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f
+        address _uniswapV2Router, // 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D
+        address _WETH // 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
+    ) Ownable(msg.sender) {
         // verify input argument
         require(_token != address(0), "Sale token address cannot be zero");
 
@@ -114,13 +118,11 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         chainlinkETHUSDContract = AggregatorV3Interface(_chainlinkETHUSDAddress);
 
         // set uniswap factory and router02
-        uniswapV2Factory = IUniswapV2Factory(0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f);
-        uniswapV2Router = IUniswapV2Router02(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
+        uniswapV2Factory = IUniswapV2Factory(_uniswapV2Factory);
+        uniswapV2Router = IUniswapV2Router02(_uniswapV2Router);
 
         // set the WETH token address
-        WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
-
-        MININUM_PERIOD_LOCK_ETH = 30 days;
+        WETH = _WETH;
     }
 
     /******************************************************
