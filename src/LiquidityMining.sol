@@ -40,12 +40,6 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     // deposit start time, i.e the time presale is over
     uint256 public depositStart;
     
-    uint256 public REWARD_RATE_1M = 10_000;
-    uint256 public REWARD_RATE_2M = 5_000;
-    uint256 public REWARD_RATE_3M = 2_500;
-    uint256 public REWARD_RATE_4M = 1_500;
-    uint256 public REWARD_RATE_5M = 1_000;
-    uint256 public DENOMINATOR = 10_000;
     // minimum ETH amount to deposit
     uint256 public ALLOWED_MINIMUM_DEPOSIT;
     // WETH token address
@@ -107,8 +101,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         address _token,
         address _chainlinkETHUSDAddress,
         address _uniswapV2Factory, // 0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f
-        address _uniswapV2Router, // 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D
-        address _WETH // 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
+        address _uniswapV2Router // 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D
     ) Ownable(msg.sender) {
         // verify input argument
         require(_token != address(0), "Sale token address cannot be zero");
@@ -122,7 +115,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         uniswapV2Router = IUniswapV2Router02(_uniswapV2Router);
 
         // set the WETH token address
-        WETH = _WETH;
+        WETH = uniswapV2Router.WETH();
     }
 
     /******************************************************
