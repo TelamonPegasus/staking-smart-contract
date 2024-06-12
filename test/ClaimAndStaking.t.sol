@@ -355,13 +355,13 @@ contract StakeFromClaimingTest is BaseTest {
     ***************************************/
     function _calculateRewards(uint256 _principal, uint256 _durationInMonths) private view returns (uint256) {
         if (_durationInMonths <= 3) {
-            return _principal * REWARD_RATE_1Q / DENOMINATOR;
+            return _principal * REWARD_RATE_1Q * _durationInMonths / (12 * DENOMINATOR);
         } else if (_durationInMonths <= 6) {
-            return _principal * REWARD_RATE_2Q / DENOMINATOR;
+            return _principal * REWARD_RATE_2Q * _durationInMonths / (12 * DENOMINATOR);
         } else if (_durationInMonths <= 9) {
-            return _principal * REWARD_RATE_3Q / DENOMINATOR;
+            return _principal * REWARD_RATE_3Q * _durationInMonths / (12 * DENOMINATOR);
         } else {
-            return _principal * REWARD_RATE_4Q / DENOMINATOR;
+            return _principal * REWARD_RATE_4Q * _durationInMonths / (12 * DENOMINATOR);
         }
     }
 }
@@ -801,13 +801,13 @@ contract StakingEnableTest is BaseTest {
     ***************************************/
     function _calculateRewards(uint256 _principal, uint256 _durationInMonths) private view returns (uint256) {
         if (_durationInMonths <= 3) {
-            return _principal * REWARD_RATE_1Q / DENOMINATOR;
+            return _principal * REWARD_RATE_1Q * _durationInMonths / (12 * DENOMINATOR);
         } else if (_durationInMonths <= 6) {
-            return _principal * REWARD_RATE_2Q / DENOMINATOR;
+            return _principal * REWARD_RATE_2Q * _durationInMonths / (12 * DENOMINATOR);
         } else if (_durationInMonths <= 9) {
-            return _principal * REWARD_RATE_3Q / DENOMINATOR;
+            return _principal * REWARD_RATE_3Q * _durationInMonths / (12 * DENOMINATOR);
         } else {
-            return _principal * REWARD_RATE_4Q / DENOMINATOR;
+            return _principal * REWARD_RATE_4Q * _durationInMonths / (12 * DENOMINATOR);
         }
     }
 
