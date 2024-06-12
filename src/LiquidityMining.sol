@@ -223,7 +223,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
 
         uint256 day = depositStart / 1 days;
         Checkpoint storage startDayCp = dailyTotalHistory[startDay];
-        while (day < startDay) {
+        while (day <= startDay) {
             Checkpoint memory dayCp = dailyTotalHistory[day];
             if (dailyTotalHistory[day].amount != 0) {
                 startDayCp.amount = dayCp.amount;
@@ -605,47 +605,47 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
             rewardAmount = 0;
             lastCpDay = 0;
             lastTotalCpDay = 0;
-        }
-        
-        // get the daily rewardable amount
-        uint256 dailyReward = totalReward / rewardPeriod;
+        } else {
+            // get the daily rewardable amount
+            uint256 dailyReward = totalReward / rewardPeriod;
 
-        // get the today
-        uint256 today = block.timestamp / 1 days;
-        // get the reward end day (the next day of end day, indeed)
-        uint256 rewardEndDay = startDay + rewardPeriod;
-        // get the last day when user claimed reward
-        uint256 lastClaimDay = lastRewardClaimDay[user] == 0 ? startDay : lastRewardClaimDay[user];
+            // get the today
+            uint256 today = block.timestamp / 1 days;
+            // get the reward end day (the next day of end day, indeed)
+            uint256 rewardEndDay = startDay + rewardPeriod;
+            // get the last day when user claimed reward
+            uint256 lastClaimDay = lastRewardClaimDay[user] == 0 ? startDay : lastRewardClaimDay[user];
 
-        lastCpDay = lastCheckpointDay[user];
-        lastTotalCpDay = lastTotalCheckpointDay[user];
-        uint256 endDay = today > rewardEndDay ?  rewardEndDay : today;
-        for (uint256 day = lastClaimDay; day < endDay; ++day) {
-            uint256 totalCpAmount;
-            Checkpoint memory dayTotalCp = dailyTotalHistory[day];
-            if (dayTotalCp.amount != 0 || dayTotalCp.prev != 0) {
-                totalCpAmount = dayTotalCp.amount;
-                lastTotalCpDay = day;
-            } else {
-                totalCpAmount = dailyTotalHistory[lastTotalCpDay].amount;
-            }
+            lastCpDay = lastCheckpointDay[user];
+            lastTotalCpDay = lastTotalCheckpointDay[user];
+            uint256 endDay = today > rewardEndDay ?  rewardEndDay : today;
+            for (uint256 day = lastClaimDay; day < endDay; ++day) {
+                uint256 totalCpAmount;
+                Checkpoint memory dayTotalCp = dailyTotalHistory[day];
+                if (dayTotalCp.amount != 0 || dayTotalCp.prev != 0) {
+                    totalCpAmount = dayTotalCp.amount;
+                    lastTotalCpDay = day;
+                } else {
+                    totalCpAmount = dailyTotalHistory[lastTotalCpDay].amount;
+                }
 
-            if (totalCpAmount == 0) continue;
+                if (totalCpAmount == 0) continue;
 
-            Checkpoint memory dayCp = userDailyHistory[user][day];
+                Checkpoint memory dayCp = userDailyHistory[user][day];
 
-            if (dayCp.amount != 0 || dayCp.prev != 0) {
-                // TODO need to validate if denominator is not zero
-                rewardAmount += dailyReward * dayCp.amount / totalCpAmount;
-                lastCpDay = day;
-            } else {
-                // TODO consider decreased 0 amount
+                if (dayCp.amount != 0 || dayCp.prev != 0) {
+                    // TODO need to validate if denominator is not zero
+                    rewardAmount += dailyReward * dayCp.amount / totalCpAmount;
+                    lastCpDay = day;
+                } else {
+                    // TODO consider decreased 0 amount
 
-                // continue if user deposit ETH is zero
-                Checkpoint memory userLastDayCp = userDailyHistory[user][lastCpDay];
-                if (userLastDayCp.amount == 0) continue;
+                    // continue if user deposit ETH is zero
+                    Checkpoint memory userLastDayCp = userDailyHistory[user][lastCpDay];
+                    if (userLastDayCp.amount == 0) continue;
 
-                rewardAmount += dailyReward * userLastDayCp.amount / totalCpAmount;
+                    rewardAmount += dailyReward * userLastDayCp.amount / totalCpAmount;
+                }
             }
         }
     }
