@@ -349,13 +349,13 @@ contract Staking is Ownable {
         require(toIndex >= fromIndex, "Invalid order of indexes");
 
         uint256 length = numStakes(staker);
-        fromIndex = fromIndex >= length ? length - 1 : fromIndex;
+        if (fromIndex >= length) return new UserStake[](0);
+        
         toIndex = toIndex >= length ? length - 1 : toIndex;
         
         UserStake[] memory userStakeArray = new UserStake[](toIndex - fromIndex + 1);
-
         for (uint256 i = fromIndex; i <= toIndex;) {
-            userStakeArray[i] = userStakes[staker][i];
+            userStakeArray[i - fromIndex] = userStakes[staker][i];
 
             unchecked {
                 ++i;
