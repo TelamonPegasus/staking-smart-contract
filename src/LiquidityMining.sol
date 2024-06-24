@@ -348,6 +348,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         require(totalDeposits != 0, "Insufficient ETH balance to mint LP");
 
         pair = IUniswapV2Pair(_pair);
+        require(pair.token0() == address(token) || pair.token1() == address(token), "Invalid pair address");
 
         listedTime = block.timestamp;
 
@@ -559,7 +560,6 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     /**
      * @notice deposit tokens for reward program of liquidity mining
      */
-    // @audit need test
     function depositRewardTokens(uint256 amount) external onlyOwner {
         // verity input argument
         require(amount != 0, "Invalid token amount");
