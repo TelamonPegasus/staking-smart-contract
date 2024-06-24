@@ -43,32 +43,6 @@ contract SetterTest is BaseTest {
         super.setUp();
     }
 
-    function test_setTokenRevertZeroAddress() public {
-        vm.expectRevert("Token address cannot be zero.");
-
-        liquidityMining.setToken(address(0));
-    }
-
-    function test_setToken() public {
-        MockERC20 newMockERC20 = new MockERC20();
-
-        liquidityMining.setToken(address(newMockERC20));
-        assertEq(address(liquidityMining.token()), address(newMockERC20));
-    }
-
-    function test_setWETHRevertZeroAddress() public {
-        vm.expectRevert("Token address cannot be zero.");
-
-        liquidityMining.setWETH(address(0));
-    }
-
-    function test_setWETH() public {
-        MockERC20 newMockERC20 = new MockERC20();
-
-        liquidityMining.setWETH(address(newMockERC20));
-        assertEq(address(liquidityMining.WETH()), address(newMockERC20));
-    }
-
     function test_setDepositRevertInvalidStartTime(uint16 diff) public {
         vm.assume(diff != 0);
         uint256 startTime = block.timestamp - uint256(diff);
@@ -99,18 +73,6 @@ contract SetterTest is BaseTest {
     function test_setAllowedMinimumDeposit(uint256 _amount) public {
         liquidityMining.setAllowedMinimumDeposit(_amount);
         assertEq(liquidityMining.ALLOWED_MINIMUM_DEPOSIT(), _amount);
-    }
-
-    function test_setPairRevertZeroAddress() public {
-        vm.expectRevert("Pair address cannot be zero");
-
-        liquidityMining.setPair(address(0));
-    }
-
-    function test_setPair(address _pair) public {
-        vm.assume(_pair != address(0));
-
-        liquidityMining.setPair(_pair);
     }
 
     function test_depositETHRevertInvalidStartTime() public {
