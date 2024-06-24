@@ -458,10 +458,6 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
 
             userTotalDeposits[msg.sender] += amountETH;
 
-            // TODO consider using this `totalDeposits` state seriously
-            // increase total deposit amount
-            // totalDeposits += amountETH;
-
             _updateHistoryForReward(msg.sender, amountETH, false);
 
             aToken = amountToken;
@@ -559,17 +555,12 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
      * @notice Get the reward token amount based on the reward program
      *
      * @param user address of user to get the reward
-     *
-     * TODO should consider mining is performed?
      */
-    // @audit need test
     function getRewardTokenAmount(address user) public view returns(
         uint256 rewardAmount,
         uint256 lastCpDay,
         uint256 lastTotalCpDay
     ) {
-        // TODO verify reward params was set
-
         // verify input argument
         require(user != address(0), "Invalid user address");
         if (startDay == 0) { // in the case that start day is not defined yet
@@ -605,12 +596,9 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
                 Checkpoint memory dayCp = userDailyHistory[user][day];
 
                 if (dayCp.amount != 0 || dayCp.prev != 0) {
-                    // TODO need to validate if denominator is not zero
                     rewardAmount += dailyReward * dayCp.amount / totalCpAmount;
                     lastCpDay = day;
                 } else {
-                    // TODO consider decreased 0 amount
-
                     // continue if user deposit ETH is zero
                     Checkpoint memory userLastDayCp = userDailyHistory[user][lastCpDay];
                     if (userLastDayCp.amount == 0) continue;
