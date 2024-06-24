@@ -45,18 +45,6 @@ contract ClaimingBaseTest is BaseTest {
         claiming.setClaimStart(block.timestamp + 5 days);
     }
 
-    function test_setTokenRevertZeroAddress() public {
-        vm.expectRevert("Token address cannot be zero.");
-        claiming.setToken(address(0));
-    }
-
-    function test_setToken() public {
-        MockERC20 newMockERC20 = new MockERC20();
-
-        claiming.setToken(address(newMockERC20));
-        assertEq(address(claiming.token()), address(newMockERC20));
-    }
-
     function test_setStakingRevertZeroAddress() public {
         vm.expectRevert("Staking contract cannot be zero address.");
         claiming.setStakingContract(address(0));
@@ -783,17 +771,6 @@ contract StakingEnableTest is BaseTest {
         assertTrue(staking.stakingEnabled());
         vm.expectRevert("Staking is already enabled");
         staking.setStakingEnabled();
-    }
-
-    function test_setStakeToken() public {
-        MockERC20 thirdToken = new MockERC20();
-        staking.setToken(address(thirdToken));
-        assertEq(address(staking.token()), address(thirdToken));
-    }
-
-    function test_setStakeTokenRevertZeroAddress() public {
-        vm.expectRevert("Stake token address cannot be zero address");
-        staking.setToken(address(0));
     }
 
     /***************************************

@@ -86,18 +86,6 @@ contract Claiming is Ownable {
     ******************************************************/
 
     /**
-     * @notice Set the token address
-     * 
-     * @param _token The address of the token 
-     */
-    function setToken(address _token) external onlyOwner {
-        // verify input argument
-        require(_token != address(0), "Token address cannot be zero.");
-
-        token = IERC20(_token);
-    }
-
-    /**
      * @notice Set the address of staking contract
      *
      * @param _staking The address of the staking contract
