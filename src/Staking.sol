@@ -368,20 +368,6 @@ contract Staking is Ownable {
     /*****************************************************
                             Setter
     *****************************************************/
-
-    /**
-     * @notice Set the staking token
-     * 
-     * @dev Only owner can call this function; should check non-zero address
-     * 
-     * @param _token address of the staking token to be updated
-     */
-    function setToken(address _token) external onlyOwner {
-        require(_token != address(0), "Stake token address cannot be zero address");
-
-        token = IERC20(_token);
-    }
-
     /**
      * @notice Set the address of claiming contract
      * 
