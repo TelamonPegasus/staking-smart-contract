@@ -123,30 +123,6 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     ******************************************************/
 
     /**
-     * @notice Set the sale token address
-     * 
-     * @param _token The address of sale token 
-     */
-    function setToken(address _token) external onlyOwner {
-        // verify input argument
-        require(_token != address(0), "Token address cannot be zero.");
-
-        token = IERC20(_token);
-    }
-
-    /**
-     * @notice Set the WETH token address
-     * 
-     * @param _WETH The address of WETH token 
-     */
-    function setWETH(address _WETH) external onlyOwner {
-        // verify input argument
-        require(_WETH != address(0), "Token address cannot be zero.");
-
-        WETH = _WETH;
-    }
-
-    /**
      * @notice Set the time to start claiming
      *
      * @param _depositStart The time to start claiming
@@ -186,18 +162,6 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         ALLOWED_MINIMUM_DEPOSIT = amount;
 
         emit AllowedMinimumDepositUpdated(msg.sender, previousAmount, amount, block.timestamp);
-    }
-
-    /**
-     * @notice Set the uniswap v2 pair contract
-     *
-     * @param _pair the address of the pair pool
-     */
-    function setPair(address _pair) external onlyOwner {
-        // verify input argument
-        require(_pair != address(0), "Pair address cannot be zero");
-
-        pair = IUniswapV2Pair(_pair);
     }
 
     /**
