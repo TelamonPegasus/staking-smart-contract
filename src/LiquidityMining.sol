@@ -364,7 +364,8 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         IClaiming(claiming).transferTokenToLiquidityMining(amount);
 
         // Approve router to mint LP
-        token.approve(address(uniswapV2Router), amount);
+        bool success = token.approve(address(uniswapV2Router), amount);
+        require(success, "Approve failed");
 
         try uniswapV2Router.addLiquidityETH{value: totalDeposits} ( // Amount of ETH to send for LP on univ2
             address(token),
@@ -419,7 +420,8 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
             ownLiquidity = listedLiquidity * userDeposit.amount / totalDeposits;
         }
 
-        pair.approve(address(uniswapV2Router), ownLiquidity);
+        bool success = pair.approve(address(uniswapV2Router), ownLiquidity);
+        require(success, "Approve failed");
         
         // remove liquidity and transfer tokens to caller
         (amountToken, amountETH) = uniswapV2Router.removeLiquidityETH(
@@ -453,7 +455,8 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         // transfer token from user to mining contract here
         token.safeTransferFrom(msg.sender, address(this), amount);
         // approve router to transfer token from mining to pair
-        token.approve(address(uniswapV2Router), amount);
+        bool success = token.approve(address(uniswapV2Router), amount);
+        require(success, "Approve failed");
 
         // add liquidity by depositing both of token and ETH
         try uniswapV2Router.addLiquidityETH{value: msg.value} (
