@@ -44,7 +44,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     uint256 public ALLOWED_MINIMUM_DEPOSIT;
     // WETH token address
     address public WETH;
-    // total deposit ETH
+    // total deposit ETH until list the liquidity
     uint256 public totalDeposits;
     // user's deposit ETH
     mapping(address => UserDeposit[]) public userDeposits;
@@ -76,6 +76,8 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     event DepositStartTimeUpdated(address indexed user, uint256 depositStartTime);
     // Event emitted when allowed minimum deposit amount is updated
     event AllowedMinimumDepositUpdated(address indexed user, uint256 previousAmount, uint256 amount, uint256 time);
+    // Event emitted when claiming contract address was updated by the owner
+    event ClaimingContractAddressUpdated(address indexed user, address claiming, uint256 time);
     // Event emitted when liquidity added by the owner
     event LiquidityAdded(address indexed user, uint256 liquidity, uint256 time);
     // Event emitted when liquidity removed by the depositor
@@ -148,6 +150,8 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         require(_claiming != address(0), "Contract address cannot be zero address");
 
         claiming = _claiming;
+
+        emit ClaimingContractAddressUpdated(msg.sender, claiming, block.timestamp);
     }
 
     /**
@@ -438,7 +442,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
 
             if (msg.value > amountETH) { // no need, but for security
                 // refund left ETH to the user back
-                ( bool success, ) = address(msg.sender).call{
+                ( success, ) = address(msg.sender).call{
                     value: msg.value - amountETH,
                     gas: 35000 // limit gas fee to prevent hook operation
                 }("");
