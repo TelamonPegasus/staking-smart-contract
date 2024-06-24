@@ -279,7 +279,8 @@ contract Claiming is Ownable {
         require(amount <= claimInfo.amount, "Insufficient claimable amount");
 
         claimInfo.amount -= amount;
-        token.approve(staking, amount);
+        bool success = token.approve(staking, amount);
+        require(success, "Approve failed");
 
         IStaking(staking).stakeFromClaiming(msg.sender, amount, durationInMonths);
 
