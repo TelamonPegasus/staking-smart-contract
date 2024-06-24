@@ -34,18 +34,24 @@ contract Claiming is Ownable {
     mapping(address => uint256) private claimInfoIndex;
 
     /* ========== EVENTS ========== */
-    // Event emitted when a owner deposits token
+    // Event emitted when owner deposits token
     event Deposited(address indexed user, uint256 amount, uint256 time);
-    // Event emitted when a owner withdraws token
+    // Event emitted when owner withdraws token
     event Withdrawed(address indexed user, uint256 amount, uint256 time);
-    // Event emitted when a owner updates the time to start claiming
+    // Event emiited when owner updates the staking contract address
+    event StakingContractAddressUpdated(address indexed user, address staking, uint256 time);
+    // Event emiited when owner updates the liquidityMining contract address
+    event LiquidityMiningContractAddressUpdated(address indexed user, address liquidityMining, uint256 time);
+    // Event emitted when owner updates the time to start claiming
     event ClaimStartTimeUpdated(address indexed user, uint256 claimStartTime);
-    // Event emitted when a owner updates the time to start claiming
+    // Event emitted when owner updates the time to start claiming
     event ClaimInfoUpdated(address indexed user, uint256 previousAmount, uint256 amount, uint256 time);
     // Event emitted when a user claimed his token
     event Claimed(address indexed user, address indexed beneficiary, uint256 amount, uint256 time);
     // Event emitted whan a user stake directly without 
     event Staked(address indexed user, uint256 amount, uint256 time);
+    // Event emitted when token is transferred to liquidityMining for adding liquidity
+    event TokenTransferedToLiquidityMining(address indexed user, uint256 amount, uint256 time);
 
     modifier whenClaimStarted() {
         // verify the claiming was started
@@ -95,6 +101,8 @@ contract Claiming is Ownable {
         require(address(_staking) != address(0), "Staking contract cannot be zero address.");
 
         staking = _staking;
+
+        emit StakingContractAddressUpdated(msg.sender, staking, block.timestamp);
     }
 
     /**
@@ -107,6 +115,8 @@ contract Claiming is Ownable {
         require(address(_liquidityMining) != address(0), "Liquidity mining contract cannot be zero address.");
 
         liquidityMining = _liquidityMining;
+
+        emit LiquidityMiningContractAddressUpdated(msg.sender, liquidityMining, block.timestamp);
     }
 
     /**
@@ -301,6 +311,8 @@ contract Claiming is Ownable {
         require(liquidityMining != address(0) && liquidityMining == msg.sender, "Only liquidity mining contract can call this function");
 
         token.safeTransfer(liquidityMining, amount);
+
+        emit TokenTransferedToLiquidityMining(msg.sender, amount, block.timestamp);
     }
 
     /*****************************************************

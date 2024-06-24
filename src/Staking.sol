@@ -53,6 +53,10 @@ contract Staking is Ownable {
     event Claimed(address indexed user, uint256 amount, uint256 time);
     // Event emitted when tokens are recovered
     event Recovered(address indexed sender, address token, uint256 amount);
+    // Event emitted when claiming contract address was updated by the owner
+    event ClaimingContractAddressUpdated(address indexed user, address claiming, uint256 time);
+    // Event emitted when staking is enabled by the owner
+    event StakingEnabled(address indexed user, uint256 time);
 
     /**
      * @dev Set the staking & reward token contract and owner of this smart contract.
@@ -144,10 +148,7 @@ contract Staking is Ownable {
         // verify input argument
         require(index < userStakes[msg.sender].length, "Invalid index of staking");
         
-        uint256 amount = _withdraw(msg.sender, index);
-
-        // emit an event
-        emit Withdrawed(msg.sender, amount, block.timestamp);
+        _withdraw(msg.sender, index);
     }
 
     /**
@@ -213,6 +214,9 @@ contract Staking is Ownable {
 
         // transfer token from here to staker's wallet
         token.safeTransfer(staker, amount);
+
+        // emit an event
+        emit Withdrawed(staker, amount, block.timestamp);
 
         return amount;
     }
@@ -380,6 +384,8 @@ contract Staking is Ownable {
         require(_claiming != address(0), "Reward token address cannot be zero address");
 
         claiming = _claiming;
+
+        emit ClaimingContractAddressUpdated(msg.sender, claiming, block.timestamp);
     }
 
     /**
@@ -392,5 +398,7 @@ contract Staking is Ownable {
         require(!stakingEnabled, "Staking is already enabled");
 
         stakingEnabled = true;
+
+        emit StakingEnabled(msg.sender, block.timestamp);
     }
 }
