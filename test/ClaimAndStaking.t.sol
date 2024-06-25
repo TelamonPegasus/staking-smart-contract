@@ -286,6 +286,9 @@ contract StakeFromClaimingTest is BaseTest {
         super.setUp();
 
         staking.setClaimingContract(address(claiming));
+        staking.setRewardLimit(10000 ether);
+        deal(address(stakeToken), address(staking), 10000 ether);
+
         claiming.setStakingContract(address(staking));
         claiming.setClaimStart(block.timestamp + 5 days);
 
@@ -328,14 +331,28 @@ contract StakeFromClaimingTest is BaseTest {
         vm.prank(alice);
         claiming.stake(2 ether, _durationInMonths);
 
-        assertEq(stakeToken.balanceOf(address(staking)), 2 ether);
         assertEq(stakeToken.balanceOf(address(claiming)), 198 ether);
         assertEq(claiming.getClaimableAmount(alice), 3 ether);
 
         (,,,uint256 rewards) = staking.getStakeInfo(alice, staking.numStakes(alice) - 1);
         assertEq(rewards, _calculateRewards(2 ether, _durationInMonths));
+        assertEq(staking.rewardAmount(), rewards);
 
         assertEq(staking.totalSupply(), 2 ether);
+    }
+
+    function test_stakeFromClaimingRevertOverflowRewardLimit() public {
+        staking.setRewardLimit(1 ether);
+        deal(address(stakeToken), address(staking), 1 ether);
+
+        vm.prank(alice);
+        claiming.stake(1 ether, 12);
+
+        assertEq(staking.rewardAmount(), 0.5 ether);
+
+        vm.expectRevert("Overflow of reward limit");
+        vm.prank(alice);
+        claiming.stake(1.1 ether, 12);
     }
 
     /***************************************
@@ -381,6 +398,9 @@ contract StakingEnableTest is BaseTest {
         super.setUp();
 
         staking.setStakingEnabled();
+        staking.setRewardLimit(10000 ether);
+        deal(address(stakeToken), address(staking), 10000 ether);
+
         deal(address(stakeToken), alice, 1000 ether);
         // deal(address(rewardToken), address(staking), 1000 ether);
     }
@@ -404,6 +424,7 @@ contract StakingEnableTest is BaseTest {
 
         (,,,uint256 rewards) = staking.getStakeInfo(alice, staking.numStakes(alice) - 1);
         assertEq(rewards, _calculateRewards(amount, _durationInMonths));
+        assertEq(staking.rewardAmount(), rewards);
 
         assertEq(staking.totalSupply(), amount);
     }
@@ -433,6 +454,24 @@ contract StakingEnableTest is BaseTest {
         vm.stopPrank();
     }
 
+    function test_stakeRevertOverflowRewardLimit() public {
+        staking.setRewardLimit(1 ether);
+        deal(address(stakeToken), address(staking), 1 ether);
+
+        vm.startPrank(alice);
+        stakeToken.approve(address(staking), 1 ether);
+        staking.stake(1 ether, 12);
+        vm.stopPrank();
+
+        assertEq(staking.rewardAmount(), 0.5 ether);
+
+        vm.startPrank(alice);
+        stakeToken.approve(address(staking), 1.1 ether);
+        vm.expectRevert("Overflow of reward limit");
+        staking.stake(1.1 ether, 12);
+        vm.stopPrank();
+    }
+
     function test_withdraw(uint8 _amount, uint8 _durationInMonths) public {
         vm.assume(_amount <= 100 && _amount >= 1);
         vm.assume(
@@ -451,10 +490,12 @@ contract StakingEnableTest is BaseTest {
         (uint256 _currentAmount, uint256 lockOn, uint256 lockEnd, uint256 rewards) = staking.getStakeInfo(alice, 0);
         assertEq(amount, _currentAmount);
         assertEq(lockEnd, lockOn + uint256(_durationInMonths) * 30 days);
+        assertEq(staking.rewardAmount(), rewards);
         vm.warp(lockEnd);
 
         vm.prank(alice);
         staking.withdraw(0);
+        assertEq(staking.rewardAmount(), rewards);
 
         (uint256 leftAmount, , , uint256 leftRewards) = staking.getStakeInfo(alice, 0);
         assertEq(leftAmount, 0);
@@ -491,12 +532,14 @@ contract StakingEnableTest is BaseTest {
         assertEq(amount, _currentAmount);
         assertEq(lockEnd, lockOn + uint256(_durationInMonths) * 30 days);
         assertEq(rewards, _calculateRewards(amount, _durationInMonths));
+        assertEq(staking.rewardAmount(), rewards);
 
         vm.prank(alice);
         staking.withdraw(0);
 
         (, , , uint256 currentRewards) = staking.getStakeInfo(alice, 0);
         assertEq(currentRewards, 0);
+        assertEq(staking.rewardAmount(), 0);
     }
 
     function test_withdrawRevertZeroStakedAmount() public {
