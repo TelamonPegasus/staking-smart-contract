@@ -25,6 +25,11 @@ contract Staking is Ownable {
     // Value that represents whether staking is possible or not
     bool public stakingEnabled;
 
+    // Reward limit for restrict staking
+    uint256 public rewardLimit;
+    // Current reward amount which claimed or will claim
+    uint256 public rewardAmount;
+
     uint256 public REWARD_RATE_1Q = 1_000;
     uint256 public REWARD_RATE_2Q = 2_500;
     uint256 public REWARD_RATE_3Q = 3_500;
@@ -57,6 +62,8 @@ contract Staking is Ownable {
     event ClaimingContractAddressUpdated(address indexed user, address claiming, uint256 time);
     // Event emitted when staking is enabled by the owner
     event StakingEnabled(address indexed user, uint256 time);
+    // Event emitted when owner updates the reward limit
+    event RewardLimitUpdated(address indexed user, uint256 amount, uint256 time);
 
     /**
      * @dev Set the staking & reward token contract and owner of this smart contract.
@@ -90,6 +97,11 @@ contract Staking is Ownable {
         token.safeTransferFrom(msg.sender, address(this), amount);
 
         uint256 rewards = calculateRewards(amount, durationInMonths);
+        // update the cumulative reward amount
+        rewardAmount += rewards;
+        // verify if reward amount is not over limit
+        require(rewardAmount <= rewardLimit, "Overflow of reward limit");
+
         uint256 lockEnd = block.timestamp + (durationInMonths * 30 days);
         userStakes[msg.sender].push(UserStake({
             amount: amount,
@@ -105,6 +117,14 @@ contract Staking is Ownable {
         emit Staked(msg.sender, amount, block.timestamp);
     }
 
+    /**
+     * @notice presale buyers can stake their claimable tokens before staking is enabled
+     * only callable from claiming contract
+     *
+     * @param staker address of staker who has claimable token
+     * @param amount amount of token to stake
+     * @param durationInMonths duration of staking in months
+     */
     function stakeFromClaiming(address staker, uint256 amount, uint256 durationInMonths) external {
         // verify caller is claiming contract
         require(msg.sender == claiming, "Only claiming contract can call this function");
@@ -122,6 +142,11 @@ contract Staking is Ownable {
         token.safeTransferFrom(msg.sender, address(this), amount);
 
         uint256 rewards = calculateRewards(amount, durationInMonths);
+        // update the cumulative reward amount
+        rewardAmount += rewards;
+        // verify if reward amount is not over limit
+        require(rewardAmount <= rewardLimit, "Overflow of reward limit");
+
         uint256 lockEnd = block.timestamp + (durationInMonths * 30 days);
         userStakes[staker].push(UserStake({
             amount: amount,
@@ -203,6 +228,9 @@ contract Staking is Ownable {
 
         // remove rewards if it breaks the staking before time is up
         if (block.timestamp < userStake.lockEnd) {
+            // decrease the cumulative reward amount
+            rewardAmount -= userStake.rewards;
+            // remove rewards of staker
             userStake.rewards = 0;
         }
 
@@ -400,5 +428,18 @@ contract Staking is Ownable {
         stakingEnabled = true;
 
         emit StakingEnabled(msg.sender, block.timestamp);
+    }
+
+    /**
+     * @notice Set the reward limit amount to restrict staking
+     *
+     * @dev only owner can call this funciton; able to set zero value
+     *
+     * @param _rewardLimit amount of reward limit to be set
+     */
+    function setRewardLimit(uint256 _rewardLimit) external onlyOwner {
+        rewardLimit = _rewardLimit;
+
+        emit RewardLimitUpdated(msg.sender, rewardLimit, block.timestamp);
     }
 }
