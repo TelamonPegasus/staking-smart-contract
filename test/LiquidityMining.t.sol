@@ -448,6 +448,9 @@ contract LiquidityRewardTest is LiquidityBaseTest {
         deal(address(token), address(claiming), 1000000 ether);
         liquidityMining.listLiquidity(address(pair));
 
+        assertEq(claiming.claimStart(), block.timestamp + 7 days);
+        claiming.setClaimStart(block.timestamp); // update the claim start time for test
+
         vm.expectRevert("Invalid ETH deposit");
         vm.prank(alice);
         liquidityMining.addLiquidity(2000 ether);

@@ -124,9 +124,9 @@ contract Claiming is Ownable {
      *
      * @param _claimStart The time to start claiming
      */
-    function setClaimStart(uint256 _claimStart) external onlyOwner {
+    function setClaimStart(uint256 _claimStart) external onlyOwnerOrLiquidityMiningContract {
         // verify input argument
-        require(_claimStart > block.timestamp, "Invalid time for start claiming.");
+        require(_claimStart >= block.timestamp, "Invalid time for start claiming.");
 
         claimStart = _claimStart;
 
