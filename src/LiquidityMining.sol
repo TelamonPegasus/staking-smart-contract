@@ -330,6 +330,8 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
 
         // get the sale token from the claiming contract for adding liquidity
         IClaiming(claiming).transferTokenToLiquidityMining(amount);
+        // update claim start time as 7 days later from listed time
+        IClaiming(claiming).setClaimStart(listedTime + 7 days);
 
         // Approve router to mint LP
         bool success = token.approve(address(uniswapV2Router), amount);
