@@ -227,12 +227,13 @@ contract Staking is Ownable {
         require(userStake.amount > 0, "There is no staked token");
 
         // remove rewards if it breaks the staking before time is up
-        if (block.timestamp < userStake.lockEnd) {
-            // decrease the cumulative reward amount
-            rewardAmount -= userStake.rewards;
-            // remove rewards of staker
-            userStake.rewards = 0;
-        }
+        // if (block.timestamp < userStake.lockEnd) {
+        //     // decrease the cumulative reward amount
+        //     rewardAmount -= userStake.rewards;
+        //     // remove rewards of staker
+        //     userStake.rewards = 0;
+        // }
+        require(block.timestamp >= userStake.lockEnd, "Unable to withdraw before locking is over");
 
         uint256 amount = userStake.amount;
         userStake.amount = 0;

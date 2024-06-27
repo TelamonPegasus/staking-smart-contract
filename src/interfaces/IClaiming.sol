@@ -9,5 +9,7 @@ interface IClaiming {
 
     function getClaimableAmount(address) external view returns(uint256);
 
+    function getClaimRemainingAmount(address) external view returns(uint256);
+
     function transferTokenToLiquidityMining(uint256) external;
 }

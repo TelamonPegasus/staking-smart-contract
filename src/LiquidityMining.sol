@@ -721,7 +721,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         ethValue = ethAmount * price / (10 ** decimals);
 
         // get current claimable token amount for user
-        claimableAmount = IClaiming(claiming).getClaimableAmount(user);
+        claimableAmount = IClaiming(claiming).getClaimRemainingAmount(user);
         
         depositable = claimableAmount >= ethValue;
     }
