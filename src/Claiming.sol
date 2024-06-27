@@ -21,10 +21,15 @@ contract Claiming is Ownable {
 
     // maximum array length for set batch claim info
     uint256 public MAX_BATCH_SET_CLAIM = 1_000;
+    // vesting percent
+    uint256 public VESTING_PER_MONTH = 2_500;
+    uint256 public DENOMINATOR = 10_000;
 
     struct ClaimInfo {
-        address user;
-        uint256 amount;
+        address user; // address of presale buyer
+        uint256 amount; // initial claimable amount of user
+        uint256 claimed; // claimed amount of user (by only claiming)
+        uint256 remaining; // remaining amount
     }
 
     // claim info array
@@ -83,7 +88,9 @@ contract Claiming is Ownable {
         // add empty element into claim info array for comfortable index
         claimInfos.push(ClaimInfo({
             user: address(0),
-            amount: 0
+            amount: 0,
+            remaining: 0,
+            claimed: 0
         }));
     }
 
@@ -153,13 +160,17 @@ contract Claiming is Ownable {
             ClaimInfo storage claimInfo = claimInfos[index];
             previousAmount = claimInfo.amount;
             claimInfo.amount = amount;
+            claimInfo.claimed = 0;
+            claimInfo.remaining = amount;
         } else {
             // push new user's claim info
             previousAmount = 0;
             claimInfoIndex[user] = claimInfos.length;
             claimInfos.push(ClaimInfo({
                 user: user,
-                amount: amount
+                amount: amount,
+                claimed: 0,
+                remaining: amount
             }));
         }
 
@@ -192,13 +203,17 @@ contract Claiming is Ownable {
                 ClaimInfo storage claimInfo = claimInfos[index];
                 previousAmount = claimInfo.amount;
                 claimInfo.amount = amount;
+                claimInfo.claimed = 0;
+                claimInfo.remaining = amount;
             } else {
                 // push new user's claim info
                 previousAmount = 0;
                 claimInfoIndex[user] = claimInfos.length;
                 claimInfos.push(ClaimInfo({
                     user: user,
-                    amount: amount
+                    amount: amount,
+                    claimed: 0,
+                    remaining: amount
                 }));
             }
 
@@ -261,9 +276,10 @@ contract Claiming is Ownable {
         // verify claimable amount
         uint256 index = claimInfoIndex[msg.sender];
         ClaimInfo storage claimInfo = claimInfos[index];
-        require(amount <= claimInfo.amount, "Insufficient claimable amount");
+        require(amount <= getClaimableAmount(msg.sender), "Insufficient claimable amount");
 
-        claimInfo.amount -= amount;
+        claimInfo.remaining -= amount;
+        claimInfo.claimed += amount;
 
         token.safeTransfer(beneficiary, amount);
 
@@ -286,9 +302,9 @@ contract Claiming is Ownable {
         // verify claimable amount
         uint256 index = claimInfoIndex[msg.sender];
         ClaimInfo storage claimInfo = claimInfos[index];
-        require(amount <= claimInfo.amount, "Insufficient claimable amount");
+        require(amount <= claimInfo.remaining, "Insufficient claimable amount");
 
-        claimInfo.amount -= amount;
+        claimInfo.remaining -= amount;
         bool success = token.approve(staking, amount);
         require(success, "Approve failed");
 
@@ -329,11 +345,45 @@ contract Claiming is Ownable {
     /**
      * @notice Get the claimable amount of particular user
      *
+     * @param user the address of user to need to get the claimable amount
+     */
+    function getClaimableAmount(address user) public view returns(uint256 amount) {
+        uint256 index = claimInfoIndex[user];
+        ClaimInfo memory claimInfo = claimInfos[index];
+        
+        uint256 vestingAmount = getClaimableVestingAmount(user);
+
+        amount = vestingAmount > claimInfo.remaining ? claimInfo.remaining : vestingAmount;
+    }
+
+    /**
+     * @notice Get the remaining amount of claim info
+     *
+     * @param user address of user to need to get the info
+     */
+    function getClaimRemainingAmount(address user) public view returns(uint256) {
+        uint256 index = claimInfoIndex[user];
+        return claimInfos[index].remaining;
+    }
+
+    /**
+     * @notice Get the claimable vesting amount of particular user
+     *
      * @param user the address of user to need to get the detail
      */
-    function getClaimableAmount(address user) public view returns(uint256) {
+    function getClaimableVestingAmount(address user) public view returns(uint256) {
         uint256 index = claimInfoIndex[user];
-        return claimInfos[index].amount;
+        ClaimInfo memory claimInfo = claimInfos[index];
+        // return zero value if claiming is unable
+        if (claimStart == 0 || block.timestamp < claimStart) return 0;
+
+        uint256 monthIndex = (block.timestamp - claimStart) / 30 days + 1;
+        monthIndex = monthIndex <= 4 ? monthIndex : 4;
+        uint256 vestingAvailable = claimInfo.amount * monthIndex * VESTING_PER_MONTH / DENOMINATOR;
+
+        if (vestingAvailable <= claimInfo.claimed) return 0;
+
+        return vestingAvailable - claimInfo.claimed;
     }
 
     /**
