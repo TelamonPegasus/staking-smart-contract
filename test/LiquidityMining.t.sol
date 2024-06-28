@@ -183,14 +183,14 @@ contract DepositTest is BaseTest {
     }
 
     function test_depositETH() public {
-        uint256 originalClaimableAmount = claiming.getClaimableAmount(alice);
+        ( , , uint256 orgRemainAmount) = claiming.getClaimInfo(alice);
 
         vm.prank(alice);
         liquidityMining.depositETH{value: 1 ether}(); // about 4000 USD
 
-        uint256 claimableAmount = claiming.getClaimableAmount(alice);
+        ( , , uint256 remainingAmount) = claiming.getClaimInfo(alice);
         (uint256 price, uint256 decimals) = liquidityMining.fetchETHUSDPrice();
-        assertEq(originalClaimableAmount - claimableAmount, price * 1 ether / 10 ** decimals);
+        assertEq(orgRemainAmount - remainingAmount, price * 1 ether / 10 ** decimals);
 
         (uint256 amount, ,) = liquidityMining.getUserDepositInfo(alice, 0);
         assertEq(amount, 1 ether);

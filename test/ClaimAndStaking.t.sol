@@ -79,20 +79,20 @@ contract ClaimingBaseTest is BaseTest {
     }
 
     function test_setClaim() public {
+        vm.warp(claiming.claimStart());
         claiming.setClaim(alice, 1 ether);
 
-        uint256 index = claiming.getClaimInfoIndex(alice);
-        assertEq(index, 1);
-        uint256 amount = claiming.getClaimableAmount(alice);
-        assertEq(amount, 1 ether);
+        assertEq(claiming.getClaimInfoIndex(alice), 1);
+        assertEq(claiming.getClaimableAmount(alice), 0.25 ether);
+        assertEq(_getClaimRemainAmount(alice), 1 ether);
+        assertEq(claiming.getClaimaVestingAmount(alice), 0.25 ether);
 
         claiming.setClaim(alice, 2 ether);
 
-        index = claiming.getClaimInfoIndex(alice);
-        assertEq(index, 1);
-        amount = claiming.getClaimableAmount(alice);
-        assertEq(amount, 2 ether);
-
+        assertEq(claiming.getClaimInfoIndex(alice), 1);
+        assertEq(claiming.getClaimableAmount(alice), 0.5 ether);
+        assertEq(_getClaimRemainAmount(alice), 2 ether);
+        assertEq(claiming.getClaimaVestingAmount(alice), 0.5 ether);
     }
 
     function test_setClaimBatchRevertZeroArray() public {
@@ -120,6 +120,7 @@ contract ClaimingBaseTest is BaseTest {
     }
 
     function test_setClaimBatch() public {
+        vm.warp(claiming.claimStart());
         address[] memory users = new address[](3);
         uint256[] memory amounts = new uint256[](3);
 
@@ -131,10 +132,17 @@ contract ClaimingBaseTest is BaseTest {
         amounts[2] = 1.5 ether;
 
         claiming.setClaimBatch(users, amounts);
+
         assertEq(claiming.getClaimInfoIndex(alice), 1);
         assertEq(claiming.getClaimInfoIndex(bob), 2);
-        assertEq(claiming.getClaimableAmount(alice), 1.5 ether);
-        assertEq(claiming.getClaimableAmount(bob), 2 ether);
+
+        assertEq(claiming.getClaimableAmount(alice), 0.375 ether);
+        assertEq(claiming.getClaimaVestingAmount(alice), 0.375 ether);
+        assertEq(_getClaimRemainAmount(alice), 1.5 ether);
+
+        assertEq(claiming.getClaimableAmount(bob), 0.5 ether);
+        assertEq(claiming.getClaimaVestingAmount(bob), 0.5 ether);
+        assertEq(_getClaimRemainAmount(bob), 2 ether);
     }
 
     function test_setDepositRevertZeroAmount() public {
@@ -169,6 +177,12 @@ contract ClaimingBaseTest is BaseTest {
         vm.prank(alice);
         vm.expectRevert("Claiming is not able now.");
         claiming.claim(alice, 0.5 ether);
+    }
+
+    /*************** helpers ******************/
+    function _getClaimRemainAmount(address user) private view returns(uint256) {
+        ( , , uint256 remain) = claiming.getClaimInfo(user);
+        return remain;
     }
 }
 
@@ -247,18 +261,27 @@ contract ClaimingTest is BaseTest {
     function test_claim() public {
         vm.startPrank(alice);
         claiming.claim(alice, 1 ether);
-        claiming.claim(bob, 2 ether);
+        assertEq(claiming.getClaimableAmount(alice), 0.25 ether);
+        assertEq(claiming.getClaimaVestingAmount(alice), 0.25 ether);
+        assertEq(_getClaimRemainAmount(alice), 4 ether);
+        vm.warp(block.timestamp + 30 days);
+        assertEq(claiming.getClaimableAmount(alice), 1.5 ether);
+        claiming.claim(bob, 1.5 ether);
+        assertEq(claiming.getClaimaVestingAmount(alice), 0 ether);
+        assertEq(_getClaimRemainAmount(alice), 2.5 ether);
         vm.stopPrank();
 
+        assertEq(claiming.getClaimableAmount(bob), 1 ether);
         vm.prank(bob);
-        claiming.claim(bob, 1.5 ether);
+        claiming.claim(bob, 0.5 ether);
 
-        assertEq(claiming.getClaimableAmount(alice), 2 ether);
         assertEq(claiming.getClaimableAmount(bob), 0.5 ether);
+        assertEq(claiming.getClaimaVestingAmount(bob), 0.5 ether);
+        assertEq(_getClaimRemainAmount(bob), 1.5 ether);
 
         assertEq(stakeToken.balanceOf(alice), 1 ether);
-        assertEq(stakeToken.balanceOf(bob), 3.5 ether);
-        assertEq(stakeToken.balanceOf(address(claiming)), 195.5 ether);
+        assertEq(stakeToken.balanceOf(bob), 2 ether);
+        assertEq(stakeToken.balanceOf(address(claiming)), 197 ether);
     }
 
     function test_stakeRevertZeroAmount() public {
@@ -278,6 +301,12 @@ contract ClaimingTest is BaseTest {
         vm.prank(alice);
         vm.expectRevert("Only claiming contract can call this function");
         claiming.stake(1 ether, 3);
+    }
+
+    /*************** helpers ******************/
+    function _getClaimRemainAmount(address user) private view returns(uint256) {
+        ( , , uint256 remain) = claiming.getClaimInfo(user);
+        return remain;
     }
 }
 
@@ -332,7 +361,7 @@ contract StakeFromClaimingTest is BaseTest {
         claiming.stake(2 ether, _durationInMonths);
 
         assertEq(stakeToken.balanceOf(address(claiming)), 198 ether);
-        assertEq(claiming.getClaimableAmount(alice), 3 ether);
+        assertEq(_getClaimRemainAmount(alice), 3 ether);
 
         (,,,uint256 rewards) = staking.getStakeInfo(alice, staking.numStakes(alice) - 1);
         assertEq(rewards, _calculateRewards(2 ether, _durationInMonths));
@@ -368,6 +397,11 @@ contract StakeFromClaimingTest is BaseTest {
         } else {
             return _principal * REWARD_RATE_4Q * _durationInMonths / (12 * DENOMINATOR);
         }
+    }
+
+    function _getClaimRemainAmount(address user) private view returns(uint256) {
+        ( , , uint256 remain) = claiming.getClaimInfo(user);
+        return remain;
     }
 }
 
@@ -534,12 +568,13 @@ contract StakingEnableTest is BaseTest {
         assertEq(rewards, _calculateRewards(amount, _durationInMonths));
         assertEq(staking.rewardAmount(), rewards);
 
+        vm.expectRevert("Unable to withdraw before locking is over");
         vm.prank(alice);
         staking.withdraw(0);
 
-        (, , , uint256 currentRewards) = staking.getStakeInfo(alice, 0);
-        assertEq(currentRewards, 0);
-        assertEq(staking.rewardAmount(), 0);
+        // (, , , uint256 currentRewards) = staking.getStakeInfo(alice, 0);
+        // assertEq(currentRewards, 0);
+        // assertEq(staking.rewardAmount(), 0);
     }
 
     function test_withdrawRevertZeroStakedAmount() public {
@@ -548,6 +583,7 @@ contract StakingEnableTest is BaseTest {
         staking.stake(1 ether, 12);
         vm.stopPrank();
 
+        vm.warp(block.timestamp + 12 * 30 days);
         vm.prank(alice);
         staking.withdraw(0);
 
@@ -639,10 +675,15 @@ contract StakingEnableTest is BaseTest {
         uint256 totalSupply = staking.totalSupply();
 
         (uint256 amount_1, , , uint256 rewards_1) = staking.getStakeInfo(alice, 0);
-        (uint256 amount_2, , ,) = staking.getStakeInfo(alice, 1);
+        (uint256 amount_2, , , uint256 rewards_2) = staking.getStakeInfo(alice, 1);
 
         assertEq(totalSupply, amount_1 + amount_2);
 
+        vm.expectRevert("Unable to withdraw before locking is over");
+        vm.prank(alice);
+        staking.withdrawAll(false);
+
+        vm.warp(block.timestamp + 7 * 30 days);
         vm.prank(alice);
         staking.withdrawAll(false);
 
@@ -652,7 +693,7 @@ contract StakingEnableTest is BaseTest {
         assertEq(after_amount_1, 0);
         assertEq(after_amount_2, 0);
         assertEq(after_rewards_1, rewards_1);
-        assertEq(after_rewards_2, 0);
+        assertEq(after_rewards_2, rewards_2);
         assertEq(stakeToken.balanceOf(alice), aliceAmount + amount_1 + amount_2);
 
         assertEq(staking.totalSupply(), 0);
@@ -705,10 +746,15 @@ contract StakingEnableTest is BaseTest {
         uint256 totalSupply = staking.totalSupply();
 
         (uint256 amount_1, , , uint256 rewards_1) = staking.getStakeInfo(alice, 0);
-        (uint256 amount_2, , ,) = staking.getStakeInfo(alice, 1);
+        (uint256 amount_2, , , uint256 rewards_2) = staking.getStakeInfo(alice, 1);
 
         assertEq(totalSupply, amount_1 + amount_2);
 
+        vm.expectRevert("Unable to withdraw before locking is over");
+        vm.prank(alice);
+        staking.withdrawBatch(0, 1, false);
+
+        vm.warp(block.timestamp + 7 * 30 days);
         vm.prank(alice);
         staking.withdrawBatch(0, 1, false);
 
@@ -718,7 +764,7 @@ contract StakingEnableTest is BaseTest {
         assertEq(after_amount_1, 0);
         assertEq(after_amount_2, 0);
         assertEq(after_rewards_1, rewards_1);
-        assertEq(after_rewards_2, 0);
+        assertEq(after_rewards_2, rewards_2);
         assertEq(stakeToken.balanceOf(alice), aliceAmount + amount_1 + amount_2);
 
         assertEq(staking.totalSupply(), 0);
