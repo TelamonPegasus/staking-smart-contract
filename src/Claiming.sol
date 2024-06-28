@@ -29,7 +29,7 @@ contract Claiming is Ownable {
         address user; // address of presale buyer
         uint256 amount; // initial claimable amount of user
         uint256 claimed; // claimed amount of user (by only claiming)
-        uint256 remaining; // remaining amount
+        uint256 remain; // remaining amount
     }
 
     // claim info array
@@ -89,7 +89,7 @@ contract Claiming is Ownable {
         claimInfos.push(ClaimInfo({
             user: address(0),
             amount: 0,
-            remaining: 0,
+            remain: 0,
             claimed: 0
         }));
     }
@@ -161,7 +161,7 @@ contract Claiming is Ownable {
             previousAmount = claimInfo.amount;
             claimInfo.amount = amount;
             claimInfo.claimed = 0;
-            claimInfo.remaining = amount;
+            claimInfo.remain = amount;
         } else {
             // push new user's claim info
             previousAmount = 0;
@@ -170,7 +170,7 @@ contract Claiming is Ownable {
                 user: user,
                 amount: amount,
                 claimed: 0,
-                remaining: amount
+                remain: amount
             }));
         }
 
@@ -204,7 +204,7 @@ contract Claiming is Ownable {
                 previousAmount = claimInfo.amount;
                 claimInfo.amount = amount;
                 claimInfo.claimed = 0;
-                claimInfo.remaining = amount;
+                claimInfo.remain = amount;
             } else {
                 // push new user's claim info
                 previousAmount = 0;
@@ -213,7 +213,7 @@ contract Claiming is Ownable {
                     user: user,
                     amount: amount,
                     claimed: 0,
-                    remaining: amount
+                    remain: amount
                 }));
             }
 
@@ -278,7 +278,7 @@ contract Claiming is Ownable {
         ClaimInfo storage claimInfo = claimInfos[index];
         require(amount <= getClaimableAmount(msg.sender), "Insufficient claimable amount");
 
-        claimInfo.remaining -= amount;
+        claimInfo.remain -= amount;
         claimInfo.claimed += amount;
 
         token.safeTransfer(beneficiary, amount);
@@ -302,9 +302,9 @@ contract Claiming is Ownable {
         // verify claimable amount
         uint256 index = claimInfoIndex[msg.sender];
         ClaimInfo storage claimInfo = claimInfos[index];
-        require(amount <= claimInfo.remaining, "Insufficient claimable amount");
+        require(amount <= claimInfo.remain, "Insufficient claimable amount");
 
-        claimInfo.remaining -= amount;
+        claimInfo.remain -= amount;
         bool success = token.approve(staking, amount);
         require(success, "Approve failed");
 
@@ -351,19 +351,9 @@ contract Claiming is Ownable {
         uint256 index = claimInfoIndex[user];
         ClaimInfo memory claimInfo = claimInfos[index];
         
-        uint256 vestingAmount = getClaimableVestingAmount(user);
+        uint256 vestingAmount = getClaimaVestingAmount(user);
 
-        amount = vestingAmount > claimInfo.remaining ? claimInfo.remaining : vestingAmount;
-    }
-
-    /**
-     * @notice Get the remaining amount of claim info
-     *
-     * @param user address of user to need to get the info
-     */
-    function getClaimRemainingAmount(address user) public view returns(uint256) {
-        uint256 index = claimInfoIndex[user];
-        return claimInfos[index].remaining;
+        amount = vestingAmount > claimInfo.remain ? claimInfo.remain : vestingAmount;
     }
 
     /**
@@ -371,7 +361,7 @@ contract Claiming is Ownable {
      *
      * @param user the address of user to need to get the detail
      */
-    function getClaimableVestingAmount(address user) public view returns(uint256) {
+    function getClaimaVestingAmount(address user) public view returns(uint256) {
         uint256 index = claimInfoIndex[user];
         ClaimInfo memory claimInfo = claimInfos[index];
         // return zero value if claiming is unable
@@ -405,17 +395,35 @@ contract Claiming is Ownable {
     }
 
     /**
+     * @notice get the claim info of particular user address
+     *
+     * @param user address of user to get the info
+     */
+    function getClaimInfo(address user) public view returns(uint256 amount, uint256 claimed, uint256 remain) {
+        uint256 index = claimInfoIndex[user];
+
+        amount = claimInfos[index].amount;
+        claimed = claimInfos[index].claimed;
+        remain = claimInfos[index].remain;
+    }
+
+    /**
      * @notice get the claim info at the particular index
      * 
      * @dev avoid first empty element of the array
      *
      * @param index index to get the claim info
      */
-    function getClaimInfo(uint256 index) public view returns(address user, uint256 amount) {
+    function getClaimInfo(uint256 index) public view returns(address user, uint256 amount, uint256 claimed, uint256 remain) {
         require(index != 0, "Invalid start index"); // should avoid first empty element
         require(index < claimInfos.length, "Invalid index value");
 
-        return (claimInfos[index].user, claimInfos[index].amount);
+        return (
+            claimInfos[index].user,
+            claimInfos[index].amount,
+            claimInfos[index].claimed,
+            claimInfos[index].remain
+        );
     }
 
     /**

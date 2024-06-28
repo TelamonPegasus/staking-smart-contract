@@ -434,7 +434,7 @@ contract Staking is Ownable {
     /**
      * @notice Set the reward limit amount to restrict staking
      *
-     * @dev only owner can call this funciton; able to set zero value
+     * @dev only owner can call this function; able to set zero value
      *
      * @param _rewardLimit amount of reward limit to be set
      */
