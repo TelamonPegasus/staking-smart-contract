@@ -414,7 +414,7 @@ contract Claiming is Ownable {
      *
      * @param index index to get the claim info
      */
-    function getClaimInfo(uint256 index) public view returns(address user, uint256 amount, uint256 claimed, uint256 remain) {
+    function getClaimInfoAtIndex(uint256 index) public view returns(address user, uint256 amount, uint256 claimed, uint256 remain) {
         require(index != 0, "Invalid start index"); // should avoid first empty element
         require(index < claimInfos.length, "Invalid index value");
 

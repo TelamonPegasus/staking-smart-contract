@@ -175,7 +175,6 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
      * @param _start reward program start time in timestamp
      * @param _total total reward token amount
      */
-    // @audit need test
     function setRewardStates(uint256 _start, uint256 _period, uint256 _total) external onlyOwner {
         // verify setting of deposit start date
         require(depositStart != 0, "Deposit start time should be set");
@@ -253,7 +252,6 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         emit Deposited(msg.sender, msg.value, block.timestamp);
     }
 
-    // @audit need test
     function _updateHistoryForReward(address user, uint256 amount, bool isRemove) private {
         // get the today number
         uint256 today = block.timestamp / 1 days;
@@ -360,7 +358,6 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
      *
      * @param index index of the deposit array to get reward
      */
-    // @audit need test
     function removeLiquidity(uint256 index) external nonReentrant onlyWhenListed returns(
         uint256 amountToken,
         uint256 amountETH
@@ -413,7 +410,6 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
      *
      * @param amount sale token amount to add liquidity
      */
-    // @audit need test
     function addLiquidity(uint256 amount)external payable nonReentrant onlyWhenListed returns(
         uint256 aToken,
         uint256 aETH,
@@ -475,7 +471,6 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     /**
      * @notice claim reward based on the daily reward program
      */
-    // @audit need test
     function claimReward() external {
         // verify deposit and reward start time
         require(depositStart > 0, "Invalid deposit start time");
