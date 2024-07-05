@@ -207,13 +207,13 @@ contract ClaimingTest is BaseTest {
 
     function test_getClaimInfoRevertZeroIndex() public {
         vm.expectRevert("Invalid start index");
-        claiming.getClaimInfo(0);
+        claiming.getClaimInfoAtIndex(0);
     }
 
     function test_getClaimInfoRevertInvalidIndex(uint256 index) public {
         vm.assume(index > 2);
         vm.expectRevert();
-        claiming.getClaimInfo(index);
+        claiming.getClaimInfoAtIndex(index);
     }
 
     function test_getClaimInfoArrayRevertZeroFromIndex() public {
