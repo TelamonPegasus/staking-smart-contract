@@ -116,18 +116,26 @@ contract SetterTest is BaseTest {
     }
 
     // revert test for claim reward
+    function test_claimRewardRevertClaimRewardDisabled() public {
+        vm.expectRevert("Claiming reward is not enabled yet");
+        liquidityMining.claimReward();
+    }
+
     function test_claimRewardRevertZeroDepositStart() public {
+        liquidityMining.setClaimRewardEnabled();
         vm.expectRevert("Invalid deposit start time");
         liquidityMining.claimReward();
     }
 
     function test_claimRewardRevertZeroStartDay() public {
+        liquidityMining.setClaimRewardEnabled();
         liquidityMining.setDepositStart(block.timestamp);
         vm.expectRevert("Invalid reward start time");
         liquidityMining.claimReward();
     }
 
-    function test_claimRewardInvalidDate() public {
+    function test_claimRewardRevertInvalidDate() public {
+        liquidityMining.setClaimRewardEnabled();
         liquidityMining.setDepositStart(block.timestamp);
         liquidityMining.setRewardStates(block.timestamp + 1 days, 70, 700 ether);
         vm.expectRevert("Invalid date to claim reward");
@@ -386,6 +394,8 @@ contract LiquidityRewardTest is LiquidityBaseTest {
         super.setUp();
 
         depositStartDay = liquidityMining.depositStart() / 1 days;
+        // enable claiming reward
+        liquidityMining.setClaimRewardEnabled();
     }
 
     function test_simpleSetRewardStates() public {

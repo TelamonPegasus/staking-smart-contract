@@ -55,6 +55,7 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     uint256 public startDay;
     uint256 public rewardPeriod;
     uint256 public totalReward;
+    bool public claimRewardEnabled;
     mapping(address => mapping(uint256 => Checkpoint)) public userDailyHistory; // user => day => amount
     mapping(address => uint256) public userLastUpdateDay; // user => day (last day that daily history was updated)
     mapping(address => uint256) public lastRewardClaimDay; // user => day (last day that claimed reward)
@@ -88,6 +89,8 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
     event TokenDepositedForReward(address indexed user, uint256 amount, uint256 time);
     // Event emitted when the owner updates the reward program states
     event RewardProgramPlanUpdated(address indexed user, uint256 startDay, uint256 period, uint256 totalReward, uint256 time);
+    // Event emitted when the owner enable claim reward of liquidity miners
+    event ClaimRewardEnabled(address indexed user, uint256 time);
 
     modifier onlyWhenNotListed() {
         require(listedTime == 0, "Liquidity was already listed");
@@ -205,6 +208,17 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
         totalReward = _total;
 
         emit RewardProgramPlanUpdated(msg.sender, startDay, rewardPeriod, totalReward, block.timestamp);
+    }
+
+    /**
+     * @notice Allows liquidity miners to claim their rewards
+     */
+    function setClaimRewardEnabled() external onlyOwner {
+        require(!claimRewardEnabled, "Claim reward is enabled already");
+
+        claimRewardEnabled = true;
+
+        emit ClaimRewardEnabled(msg.sender, block.timestamp);
     }
 
     /******************************************************
@@ -472,6 +486,8 @@ contract LiquidityMining is Ownable, ReentrancyGuard {
      * @notice claim reward based on the daily reward program
      */
     function claimReward() external {
+        // verify claiming reward is enabled
+        require(claimRewardEnabled, "Claiming reward is not enabled yet");
         // verify deposit and reward start time
         require(depositStart > 0, "Invalid deposit start time");
         require(startDay > 0, "Invalid reward start time");
