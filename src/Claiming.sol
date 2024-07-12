@@ -351,7 +351,7 @@ contract Claiming is Ownable {
         uint256 index = claimInfoIndex[user];
         ClaimInfo memory claimInfo = claimInfos[index];
         
-        uint256 vestingAmount = getClaimaVestingAmount(user);
+        uint256 vestingAmount = getClaimVestingAmount(user);
 
         amount = vestingAmount > claimInfo.remain ? claimInfo.remain : vestingAmount;
     }
@@ -361,7 +361,7 @@ contract Claiming is Ownable {
      *
      * @param user the address of user to need to get the detail
      */
-    function getClaimaVestingAmount(address user) public view returns(uint256) {
+    function getClaimVestingAmount(address user) public view returns(uint256) {
         uint256 index = claimInfoIndex[user];
         ClaimInfo memory claimInfo = claimInfos[index];
         // return zero value if claiming is unable

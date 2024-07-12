@@ -85,14 +85,14 @@ contract ClaimingBaseTest is BaseTest {
         assertEq(claiming.getClaimInfoIndex(alice), 1);
         assertEq(claiming.getClaimableAmount(alice), 0.25 ether);
         assertEq(_getClaimRemainAmount(alice), 1 ether);
-        assertEq(claiming.getClaimaVestingAmount(alice), 0.25 ether);
+        assertEq(claiming.getClaimVestingAmount(alice), 0.25 ether);
 
         claiming.setClaim(alice, 2 ether);
 
         assertEq(claiming.getClaimInfoIndex(alice), 1);
         assertEq(claiming.getClaimableAmount(alice), 0.5 ether);
         assertEq(_getClaimRemainAmount(alice), 2 ether);
-        assertEq(claiming.getClaimaVestingAmount(alice), 0.5 ether);
+        assertEq(claiming.getClaimVestingAmount(alice), 0.5 ether);
     }
 
     function test_setClaimBatchRevertZeroArray() public {
@@ -137,11 +137,11 @@ contract ClaimingBaseTest is BaseTest {
         assertEq(claiming.getClaimInfoIndex(bob), 2);
 
         assertEq(claiming.getClaimableAmount(alice), 0.375 ether);
-        assertEq(claiming.getClaimaVestingAmount(alice), 0.375 ether);
+        assertEq(claiming.getClaimVestingAmount(alice), 0.375 ether);
         assertEq(_getClaimRemainAmount(alice), 1.5 ether);
 
         assertEq(claiming.getClaimableAmount(bob), 0.5 ether);
-        assertEq(claiming.getClaimaVestingAmount(bob), 0.5 ether);
+        assertEq(claiming.getClaimVestingAmount(bob), 0.5 ether);
         assertEq(_getClaimRemainAmount(bob), 2 ether);
     }
 
@@ -262,12 +262,12 @@ contract ClaimingTest is BaseTest {
         vm.startPrank(alice);
         claiming.claim(alice, 1 ether);
         assertEq(claiming.getClaimableAmount(alice), 0.25 ether);
-        assertEq(claiming.getClaimaVestingAmount(alice), 0.25 ether);
+        assertEq(claiming.getClaimVestingAmount(alice), 0.25 ether);
         assertEq(_getClaimRemainAmount(alice), 4 ether);
         vm.warp(block.timestamp + 30 days);
         assertEq(claiming.getClaimableAmount(alice), 1.5 ether);
         claiming.claim(bob, 1.5 ether);
-        assertEq(claiming.getClaimaVestingAmount(alice), 0 ether);
+        assertEq(claiming.getClaimVestingAmount(alice), 0 ether);
         assertEq(_getClaimRemainAmount(alice), 2.5 ether);
         vm.stopPrank();
 
@@ -276,7 +276,7 @@ contract ClaimingTest is BaseTest {
         claiming.claim(bob, 0.5 ether);
 
         assertEq(claiming.getClaimableAmount(bob), 0.5 ether);
-        assertEq(claiming.getClaimaVestingAmount(bob), 0.5 ether);
+        assertEq(claiming.getClaimVestingAmount(bob), 0.5 ether);
         assertEq(_getClaimRemainAmount(bob), 1.5 ether);
 
         assertEq(stakeToken.balanceOf(alice), 1 ether);
