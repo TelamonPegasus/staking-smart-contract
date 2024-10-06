@@ -347,14 +347,24 @@ contract Claiming is Ownable {
      *
      * @param user the address of user to need to get the claimable amount
      */
-    function getClaimableAmount(address user) public view returns(uint256 amount) {
-        uint256 index = claimInfoIndex[user];
-        ClaimInfo memory claimInfo = claimInfos[index];
-        
-        uint256 vestingAmount = getClaimVestingAmount(user);
+    function getClaimInfoArray(uint256 fromIndex, uint256 toIndex) public view returns(ClaimInfo[] memory) {
+        require(fromIndex != 0, "Invalid start index"); // should avoid first empty element
+        require(toIndex >= fromIndex, "Invalid index range");
+        require(toIndex < claimInfos.length, "Invalid end index");
 
-        amount = vestingAmount > claimInfo.remain ? claimInfo.remain : vestingAmount;
+        uint256 length = toIndex - fromIndex + 1;
+        ClaimInfo[] memory infos = new ClaimInfo[](length);
+
+        for (uint256 i = 0; i < length; i++) {
+            infos[i] = claimInfos[fromIndex + i];
+        }
+
+        return infos;
     }
+}
+
+}
+
 
     /**
      * @notice Get the claimable vesting amount of particular user
