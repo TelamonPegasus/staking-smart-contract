@@ -419,9 +419,7 @@ contract Claiming is Ownable {
 
     /**
      * @notice get the claim info at the particular index
-     * 
      * @dev avoid first empty element of the array
-     *
      * @param index index to get the claim info
      */
     function getClaimInfoAtIndex(uint256 index) public view returns(address user, uint256 amount, uint256 claimed, uint256 remain) {
