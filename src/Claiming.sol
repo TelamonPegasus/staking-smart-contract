@@ -436,7 +436,6 @@ contract Claiming is Ownable {
 
     /**
      * @notice get the array of claim info between particular indexes
-     * 
      * @dev avoid first empty element of the array
      *
      * @param fromIndex start index; should be greater than 0 (to avoid first empty element)
