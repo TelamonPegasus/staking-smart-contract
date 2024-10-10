@@ -34,6 +34,7 @@ contract Staking is Ownable {
     uint256 public REWARD_RATE_2Q = 2_500;
     uint256 public REWARD_RATE_3Q = 3_500;
     uint256 public REWARD_RATE_4Q = 5_000;
+    uint256 public REWARD_RATE_5Q = 7_000;
     uint256 public DENOMINATOR = 10_000;
 
     // Mapping to track user balances
